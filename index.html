@@ -1182,6 +1182,7 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 .scr .opt-seg button{transition:background-color .22s ease,color .22s ease,border-color .22s ease}
 .scr .d-info .stats .v{white-space:nowrap}
 .scr .d-info .stats .l{line-height:1.3}
+.wordmark .ver{font-size:11px;font-weight:500;color:var(--faint);margin-left:8px;letter-spacing:0}
 </style>
 </head>
 <body>
@@ -1227,7 +1228,7 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 
 <!-- ГЛАВНАЯ -->
 <section class="scr" id="scrHome" hidden>
-  <header class="topbar"><span class="wordmark"><i class="logo" aria-hidden="true"></i>MyStitch</span><span class="grow"></span>
+  <header class="topbar"><span class="wordmark"><i class="logo" aria-hidden="true"></i>MyStitch<small class="ver">версия 18 · превью 3D</small></span><span class="grow"></span>
     <div class="hnav"><div class="hseg" role="tablist" aria-label="Раздел"><button role="tab" id="hsModels" aria-selected="true"><span class="lg">Готовые схемы</span><span class="sh">Схемы</span></button><button role="tab" id="hsOwn" aria-selected="false"><span class="lg">Самостоятельная вышивка</span><span class="sh">Своя</span></button></div><button class="hprof acct-open" id="hProfile" aria-label="Персонализация и память" title="Персонализация и память"><svg class="ic"><use href="#i-user"/></svg></button></div>
     <span class="grow"></span>
     <button class="pill tb-load" id="tbLoad" tabindex="-1"><svg class="ic"><use href="#i-image"/></svg><span>Загрузить картинку</span></button></header>
