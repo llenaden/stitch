@@ -1156,6 +1156,12 @@ body.dragging,body.dragging *{cursor:grabbing!important}
   #ws.side-l #libPop{right:auto;left:max(12px, env(safe-area-inset-left, 0px))}
   #ws.lib-open .hand,#ws.side-l.lib-open .hand,#ws.m-play .hand{bottom:calc(40% + 22px + env(safe-area-inset-bottom, 0px))}
 }
+/* схема пересчитывается: старая видна приглушённой, без прыжков */
+#mdCanvas,#mdStats,#mdParts{transition:opacity .18s ease}
+#scrModel.md-busy #mdCanvas,#scrModel.md-busy #mdStats,#scrModel.md-busy #mdParts{opacity:.5}
+/* список цветов прокручивается пальцем с любого места строки, в том числе с плашки */
+#list .thumb,#list .thumb.sym{touch-action:pan-y}
+#list{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
 </style>
 </head>
 <body>
@@ -1666,9 +1672,10 @@ function downscale(im,W,H){ let sw=im.naturalWidth||im.width, sh=im.naturalHeigh
   while(sw/2>W&&sh/2>H){ const c=document.createElement("canvas"); c.width=Math.round(sw/2); c.height=Math.round(sh/2); const x=c.getContext("2d"); x.imageSmoothingEnabled=true; x.imageSmoothingQuality="high"; x.drawImage(src,0,0,c.width,c.height); src=c; sw=c.width; sh=c.height; }
   const c=document.createElement("canvas"); c.width=W; c.height=H; const x=c.getContext("2d"); x.imageSmoothingEnabled=true; x.imageSmoothingQuality="high"; x.drawImage(src,0,0,W,H); return x.getImageData(0,0,W,H); }
 const chartH=(C,W)=>clamp(Math.max(1,Math.round(W*C.h/C.w)),4,MAX_CELLS);
-function makeChart(im,W,maxColors){
-  const iw=im.naturalWidth||im.width, ih=im.naturalHeight||im.height; W=clamp(W|0,8,MAX_CELLS); const H=clamp(Math.max(1,Math.round(W*ih/iw)),4,MAX_CELLS);
-  const d=downscale(im,W,H).data, N=W*H, L=new Float32Array(N*3), alive=new Uint8Array(N); let nAlive=0;
+// чистый расчёт схемы — работает и в фоновом потоке, чтобы страница не замирала
+function chartCore(d,W,H,maxColors,dmc){
+  const nearest=lab=>{ let best=null,bd=1e18; for(const c of dmc){ const dd=dE2(lab,c.lab); if(dd<bd){ bd=dd; best=c; } } return best; }, labOf={}; dmc.forEach(c=>labOf[c.code]=c.lab);
+  const N=W*H, L=new Float32Array(N*3), alive=new Uint8Array(N); let nAlive=0;
   for(let i=0;i<N;i++){ if(d[i*4+3]<100) continue; const lab=rgb2lab(d[i*4],d[i*4+1],d[i*4+2]); L[i*3]=lab[0]; L[i*3+1]=lab[1]; L[i*3+2]=lab[2]; alive[i]=1; nAlive++; }
   const grid=new Int16Array(N).fill(-1); if(!nAlive) return {w:W,h:H,pal:[],grid};
   // k-средних в Lab по выборке, центры → ближайшие цвета мулине
@@ -1677,8 +1684,8 @@ function makeChart(im,W,maxColors){
   while(centers.length<k){ const dist=sample.map(p=>{ let m=1e18; for(const c of centers) m=Math.min(m,dE2(p,c)); return m; }); const tot=dist.reduce((a,b)=>a+b,0); if(tot<1e-6) break; let r=Math.random()*tot, best=null; for(let i=0;i<sample.length;i++){ r-=dist[i]; if(r<=0){ best=sample[i]; break; } } centers.push(best||sample[sample.length-1]); }
   for(let it=0;it<10;it++){ const sum=centers.map(()=>[0,0,0,0]); for(const p of sample){ let bi=0,bd=1e18; for(let c=0;c<centers.length;c++){ const dd=dE2(p,centers[c]); if(dd<bd){ bd=dd; bi=c; } } const s=sum[bi]; s[0]+=p[0]; s[1]+=p[1]; s[2]+=p[2]; s[3]++; }
     centers=centers.map((c,i)=>sum[i][3]?[sum[i][0]/sum[i][3],sum[i][1]/sum[i][3],sum[i][2]/sum[i][3]]:c); }
-  const used=new Set(), pal=[]; centers.forEach(c=>{ const m=nearestDmc(c); if(m&&!used.has(m.code)){ used.add(m.code); pal.push(m.code); } });
-  let palLab=pal.map(c=>DMC_BY[c].lab), cnt;
+  const used=new Set(), pal=[]; centers.forEach(c=>{ const m=nearest(c); if(m&&!used.has(m.code)){ used.add(m.code); pal.push(m.code); } });
+  let palLab=pal.map(c=>labOf[c]), cnt;
   const assign=()=>{ cnt=new Array(pal.length).fill(0); const P=palLab.length, pl=new Float32Array(P*3); palLab.forEach((l,j)=>{ pl[j*3]=l[0]; pl[j*3+1]=l[1]; pl[j*3+2]=l[2]; });
     for(let i=0;i<N;i++){ if(!alive[i]){ grid[i]=-1; continue; } const a=L[i*3],b=L[i*3+1],c=L[i*3+2]; let bi=0,bd=1e18; for(let j=0;j<P;j++){ const x=a-pl[j*3],y=b-pl[j*3+1],z=c-pl[j*3+2], dd=x*x+y*y+z*z; if(dd<bd){ bd=dd; bi=j; } } grid[i]=bi; cnt[bi]++; } };
   assign();
@@ -1688,8 +1695,21 @@ function makeChart(im,W,maxColors){
   for(let i=0;i<N;i++) if(grid[i]>=0) grid[i]=remap[grid[i]];
   return {w:W,h:H,pal:order.map(i=>pal[i]),grid};
 }
+function chartSize(im,W){ const iw=im.naturalWidth||im.width, ih=im.naturalHeight||im.height; W=clamp(W|0,8,MAX_CELLS); return [W,clamp(Math.max(1,Math.round(W*ih/iw)),4,MAX_CELLS)]; }
+const DMC_LAB=DMC.map(([code])=>({code,lab:DMC_BY[code].lab}));
+function makeChart(im,W,maxColors){ const [w,h]=chartSize(im,W); return chartCore(downscale(im,w,h).data,w,h,maxColors,DMC_LAB); }
+let chartWorker=null, chartJobs=new Map(), chartSeq=0;
+function getChartWorker(){ if(chartWorker!==null) return chartWorker; try{
+    const src="const clamp="+clamp+";\n"+rgb2lab+"\nconst dE2="+dE2+";\n"+chartCore+"\nonmessage=e=>{ const m=e.data; try{ const r=chartCore(m.d,m.w,m.h,m.k,m.dmc); postMessage({id:m.id,r},[r.grid.buffer]); }catch(err){ postMessage({id:m.id,err:String(err)}); } };";
+    const url=URL.createObjectURL(new Blob([src],{type:"text/javascript"})); chartWorker=new Worker(url);
+    chartWorker.onmessage=e=>{ const j=chartJobs.get(e.data.id); if(!j) return; chartJobs.delete(e.data.id); e.data.err?j.no(e.data.err):j.ok(e.data.r); };
+    chartWorker.onerror=()=>{ chartJobs.forEach(j=>j.no("worker")); chartJobs.clear(); chartWorker=false; };
+  }catch(_){ chartWorker=false; } return chartWorker; }
+function makeChartAsync(im,W,maxColors){ const wk=getChartWorker(); if(!wk) return Promise.resolve(makeChart(im,W,maxColors));
+  const [w,h]=chartSize(im,W), d=downscale(im,w,h).data, id=++chartSeq;
+  return new Promise((ok,no)=>{ chartJobs.set(id,{ok,no}); wk.postMessage({id,d,w,h,k:maxColors,dmc:DMC_LAB}); }).catch(()=>makeChart(im,W,maxColors)); }
 const chartCache=new Map(); // «картинка + ширина + цвета» → схема
-async function chartFor(C,width,colors){ const key=C.id+"|"+width+"|"+colors; if(chartCache.has(key)) return chartCache.get(key); const im=await loadImage(C.src); const r=makeChart(im,width,colors); if(chartCache.size>12) chartCache.delete(chartCache.keys().next().value); chartCache.set(key,r); return r; }
+async function chartFor(C,width,colors){ const key=C.id+"|"+width+"|"+colors; if(chartCache.has(key)) return chartCache.get(key); const im=await loadImage(C.src); const r=await makeChartAsync(im,width,colors); if(chartCache.size>12) chartCache.delete(chartCache.keys().next().value); chartCache.set(key,r); return r; }
 
 /* ---------- 2D: картинка по клеткам (1 пиксель = 1 клетка) — для миниатюр, обзора и предпросмотра ---------- */
 function cellImage(w,h,fn){ const c=document.createElement("canvas"); c.width=w; c.height=h; const g=c.getContext("2d"), id=g.createImageData(w,h), d=id.data; for(let i=0;i<w*h;i++){ const rgb=fn(i); d[i*4]=rgb[0]; d[i*4+1]=rgb[1]; d[i*4+2]=rgb[2]; d[i*4+3]=255; } g.putImageData(id,0,0); return c; }
@@ -1777,6 +1797,12 @@ const LIGHTS=[{n:"как было",d:[0.38,1,-0.52],k:1.5,f:0.3},{n:"из-за �
  {n:"низко справа",d:[1,0.24,0.08],k:2.1,f:0.15,env:2.2},
  {n:"скользящий",d:[0.25,0.12,-1],k:2.4,f:0.12,env:2.4},
  {n:"с двух сторон",d:[-1,0.55,0],k:1.3,f:0.12,env:2.2,x:[[[1,0.55,0],0xfff5e8,1.3]]},
+ // совсем низкий свет из углов: лампа почти у стола — граней-зеркал, бьющих в глаз, меньше, рельеф мягче
+ {n:"у стола слева спереди",d:[-0.78,0.1,0.62],k:2.0,f:0.32,env:1.2},
+ {n:"у стола справа спереди",d:[0.78,0.1,0.62],k:2.0,f:0.32,env:1.2},
+ {n:"у стола слева сзади",d:[-0.78,0.1,-0.62],k:2.0,f:0.32,env:1.2},
+ {n:"у стола справа сзади",d:[0.78,0.1,-0.62],k:2.0,f:0.32,env:1.2},
+ {n:"у стола спереди",d:[0,0.1,1],k:2.0,f:0.32,env:1.2},
  {n:"кольцо по кругу",d:[0.02,1,0.02],k:1.2,f:0.1,env:2.5,x:[[[1,0.35,0],0xfff5e8,0.9],[[-1,0.35,0],0xfff5e8,0.9],[[0,0.35,1],0xfff5e8,0.9],[[0,0.35,-1],0xfff5e8,0.9]]}];
 // значок положения: стол сверху, вы — снизу; светлая точка — откуда светит
 function lightSwatch(L){ const spots=[]; const at=(x,z,y)=>{ const l=Math.hypot(x,z)||1, r=Math.min(1,l/Math.hypot(x,y,z))*40; spots.push([50+x/l*r,50+z/l*r]); };
@@ -1990,6 +2016,13 @@ function surfaceTexture(){ const n=512, c=document.createElement("canvas"); c.wi
   const t=new THREE.CanvasTexture(c); t.colorSpace=THREE.SRGBColorSpace; t.wrapS=t.wrapT=THREE.RepeatWrapping; t.anisotropy=MAXANI; return t; }
 TEX.surface=surfaceTexture();
 const tableMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.85,metalness:0,envMapIntensity:0.15});
+// вдали стол плавно переходит ровно в цвет фона — тот же, которым залито всё за ним: у низкого горизонта нет полосы
+const TBG={c:{value:new THREE.Vector3(0.1,0.1,0.12)},r:{value:new THREE.Vector2(40,120)}};
+tableMat.onBeforeCompile=sh=>{ sh.uniforms.uBg=TBG.c; sh.uniforms.uBgR=TBG.r;
+  sh.vertexShader=sh.vertexShader.replace("#include <common>","#include <common>\nvarying vec3 vTW;").replace("#include <project_vertex>","#include <project_vertex>\nvTW=(modelMatrix*vec4(transformed,1.0)).xyz;");
+  sh.fragmentShader=sh.fragmentShader.replace("#include <common>","#include <common>\nvarying vec3 vTW; uniform vec3 uBg; uniform vec2 uBgR;").replace("#include <dithering_fragment>","#include <dithering_fragment>\ngl_FragColor.rgb=mix(gl_FragColor.rgb,uBg,smoothstep(uBgR.x,uBgR.y,length(vTW.xz)));"); };
+tableMat.customProgramCacheKey=()=>"tbg";
+function bgFar(T){ if(!T.g) return T.hex; if(T.g[0]==="radial") return T.g[2]; const a=new THREE.Color(T.g[1]), b=new THREE.Color(T.g[2]); return "#"+a.lerp(b,0.5).getHexString(); }
 const table=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),tableMat); table.receiveShadow=true; scene.add(table);
 const floorMat=new THREE.MeshBasicMaterial({map:TEX.glow,color:0x5a5650,transparent:false});
 const floor=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshStandardMaterial({color:0x2b2926,roughness:0.95,metalness:0})); floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
@@ -2002,7 +2035,10 @@ function applyRug(){ const R=RUGS.find(r=>r.id===ls.get("mystitch.rug")); if(!R)
   const land=padW>padH, ps=Math.min(padW,padH), pl=Math.max(padW,padH), sh=Math.max(ps*1.45,pl*1.35/1.5), lg=sh*1.5;
   rug.scale.set(sh,lg,1); rug.rotation.set(-Math.PI/2,0,land?Math.PI/2:0); rug.position.y=table.position.y+table.scale.y/2+0.02; rug.visible=true; needRender=true; shadowDirty=true; }
 function bgDot(){ const d=$("tGlowDot"); if(!d) return; const T=tableOf(ls.get("mystitch.table")); d.classList.remove("off"); d.style.background=tableCss(T); d.style.boxShadow="0 0 0 2px rgba(255,255,255,.14)"; $("tGlow").title="Цвет фона: "+T.n; }
-function applyTable(){ const T=tableOf(ls.get("mystitch.table")); table.visible=true; floor.visible=false; shadowDirty=true; if(T.g){ if(tableMat.map) tableMat.map.dispose(); tableMat.map=gradientTexture(T,Math.min(0.5,(S*1.6+40)/table.scale.x)); tableMat.color.set(0xffffff); } else { if(tableMat.map){ tableMat.map.dispose(); tableMat.map=null; } tableMat.color.set(T.hex); } tableMat.needsUpdate=true; bgDot(); applyRug(); needRender=true; }
+function applyTable(){ const T=tableOf(ls.get("mystitch.table")); table.visible=true; floor.visible=false; shadowDirty=true; if(T.g){ if(tableMat.map) tableMat.map.dispose(); tableMat.map=gradientTexture(T,Math.min(0.5,(S*1.6+40)/table.scale.x)); tableMat.color.set(0xffffff); } else { if(tableMat.map){ tableMat.map.dispose(); tableMat.map=null; } tableMat.color.set(T.hex); } tableMat.needsUpdate=true;
+  { const c=new THREE.Color(bgFar(T)); // в sRGB, как на экране
+    const h=c.getHexString(); TBG.c.value.set(parseInt(h.slice(0,2),16)/255,parseInt(h.slice(2,4),16)/255,parseInt(h.slice(4,6),16)/255); renderer.setClearColor(c,1); }
+  bgDot(); applyRug(); needRender=true; }
 const padMat=new THREE.MeshStandardMaterial({color:0xf2f2f2,roughness:0.6,metalness:0,emissive:new THREE.Color(0)});
 const pad=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),padMat); pad.receiveShadow=true; pad.castShadow=true; scene.add(pad);
 paperMat.polygonOffset=true; paperMat.polygonOffsetFactor=-2; paperMat.polygonOffsetUnits=-4;
@@ -2017,7 +2053,7 @@ function setupBoard(){ // размеры и текстуры под текущу
   const pw=W+2*margin, ph=H+2*margin, rim=0;
   paper.scale.set(pw,ph,1); paper.position.set(0,0,0);
   pad.scale.set(pw-0.06,PAD_H,ph-0.06); pad.position.set(0,-SHEET_T-0.03-PAD_H/2,0);
-  const ty=-SHEET_T-PAD_H, slab=Math.max(2.5,S*0.03); const ts=S*7+200; table.scale.set(ts,slab,ts); table.position.y=ty-slab/2; padW=pw+2*rim; padH=ph+2*rim; floor.scale.set(ts*3,ts*3,1); floor.position.y=ty-slab-Math.max(25,S*0.6);
+  const ty=-SHEET_T-PAD_H, slab=Math.max(2.5,S*0.03); const ts=S*7+200; table.scale.set(ts,slab,ts); TBG.r.value.set(S*0.9+18,S*2.6+70); table.position.y=ty-slab/2; padW=pw+2*rim; padH=ph+2*rim; floor.scale.set(ts*3,ts*3,1); floor.position.y=ty-slab-Math.max(25,S*0.6);
   halo.position.y=ty+Math.max(0.15,S*0.002); halo.material.polygonOffset=true; halo.material.polygonOffsetFactor=-4; halo.scale.set((pw+2*rim)*1.32,(ph+2*rim)*1.32,1);
   U.uGrid.value.set(W,H); U.uMargin.value=margin; U.uCross.value=cur.type==="cross"?1:0;
   if(cellTex) cellTex.dispose(); cellTex=new THREE.DataTexture(new Uint8Array(W*H*4),W,H,THREE.RGBAFormat); cellTex.magFilter=cellTex.minFilter=THREE.NearestFilter; cellTex.generateMipmaps=false; U.tCells.value=cellTex;
@@ -2028,7 +2064,7 @@ function setupBoard(){ // размеры и текстуры под текущу
   applyFabric(); applyGlow(); applyTable(); placeLights(); buildAllChunks(); shadowDirty=true; needRender=true; }
 function syncPal(){ const d=palTex.image.data; for(let i=0;i<256;i++){ const code=cur.pal[i]; const rgb=code?colorOf(code).rgb:[0,0,0]; d[i*4]=rgb[0]; d[i*4+1]=rgb[1]; d[i*4+2]=rgb[2]; d[i*4+3]=255; } palTex.needsUpdate=true; palLin=cur.pal.map(c=>new THREE.Color(hexOf(c))); }
 let palLin=[];
-function texCell(i){ const d=cellTex.image.data, t=cur.grid?cur.grid[i]:-1, p=cur.cells[i]; d[i*4]=t>=0?t&255:0; d[i*4+1]=t>=0?255:0; d[i*4+2]=p>=0?255:0; d[i*4+3]=p>=0?p&255:0; }
+function texCell(i){ const d=cellTex.image.data, t=cur.grid?cur.grid[i]:-1, p=texHold.has(i)?-1:cur.cells[i]; d[i*4]=t>=0?t&255:0; d[i*4+1]=t>=0?255:0; d[i*4+2]=p>=0?255:0; d[i*4+3]=p>=0?p&255:0; }
 function applyFabric(){ const F=fabricOf(cur.fabric); paperMat.color.set(F.hex); needRender=true; }
 function applyGlow(){ const G=glowOf(cur.glow), k=(cur.glowK==null?70:cur.glowK)/100; if(G.hex&&k>0){ const c=new THREE.Color(G.hex); U.uGlow.value.copy(c).multiplyScalar(0.26*k); padMat.emissive.copy(c).multiplyScalar(0.95*k); haloMat.color.copy(c); halo.visible=false; } else { U.uGlow.value.setRGB(0,0,0); padMat.emissive.setRGB(0,0,0); halo.visible=false; } needRender=true; }
 function placeLights(){ const L=LIGHTS[lightMode]||LIGHTS[0]; key.intensity=L.k; fill.intensity=L.f; key.color.set(L.col||0xfff5e8); const d=new THREE.Vector3();
@@ -2043,19 +2079,30 @@ const hash=i=>{ let x=(i+1)*2654435761>>>0; x^=x>>>13; x=Math.imul(x,1274126177)
 function chunkOf(i){ const c=i%W, r=(i-c)/W; return Math.floor(r/CH)*1000+Math.floor(c/CH); }
 function makeChunk(k){ const cx=k%1000, cy=Math.floor(k/1000), cap=CH*CH, hi=geoFor(cur.type,shapeOf(cur),true), lo=geoFor(cur.type,shapeOf(cur),false), mat=matFor(cur.type,shapeOf(cur));
   const A=new THREE.InstancedMesh(hi,mat,cap), B=new THREE.InstancedMesh(lo,mat,cap); B.instanceMatrix=A.instanceMatrix; A.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(cap*3),3); B.instanceColor=A.instanceColor; A.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  // запасные экземпляры — нулевые: даже если когда-нибудь попадут в отрисовку, их не видно (по умолчанию three ставит их в угол куска)
+  A.instanceMatrix.array.fill(0);
   [A,B].forEach(M=>{ M.position.set(cx*CH-W/2,0,cy*CH-H/2); M.boundingSphere=new THREE.Sphere(new THREE.Vector3(CH/2,0.2,CH/2),CH*0.72); M.castShadow=true; M.receiveShadow=true; M.count=0; scene.add(M); });
   const o={k,cx,cy,A,B,center:new THREE.Vector3(cx*CH-W/2+CH/2,0,cy*CH-H/2+CH/2)}; chunks.set(k,o); return o; }
-function rebuildChunk(k){ let o=chunks.get(k); if(!o) o=makeChunk(k); const {cx,cy,A}=o; let n=0; const round=cur.shape==="round", cross=cur.type==="cross";
+function rebuildChunk(k){ let o=chunks.get(k); if(!o) o=makeChunk(k); const {cx,cy,A}=o; let n=0; const round=cur.shape==="round", cross=cur.type==="cross", now=performance.now();
   for(let lr=0;lr<CH;lr++){ const r=cy*CH+lr; if(r>=H) break; for(let lc=0;lc<CH;lc++){ const c=cx*CH+lc; if(c>=W) break; const i=r*W+c, p=cur.cells[i]; if(p<0) continue;
       const h1=hash(i), h2=hash(i+7919), h3=hash(i+104729);
       // живая раскладка: каждая деталь чуть повёрнута и наклонена — грани ловят свет по-разному
       if(neat){ _e.set(0,0,0); _s.set(1,1,1); }
       else if(cross){ _e.set((h2-0.5)*0.03,(h1-0.5)*0.05,(h3-0.5)*0.03); _s.set(1,0.92+h2*0.16,1); }
       else { _e.set((h2-0.5)*0.07,round?h1*Math.PI*2:(h1-0.5)*0.16,(h3-0.5)*0.07); const k=0.975+h3*0.03; _s.set(k,0.96+h2*0.08,k); }
-      _q.setFromEuler(_e); _p.set(lc+0.5,0.002,lr+0.5); _m.compose(_p,_q,_s); A.setMatrixAt(n,_m);
+      _q.setFromEuler(_e); _p.set(lc+0.5,0.002,lr+0.5);
+      const t0=settle.size?settle.get(i):undefined; if(t0!==undefined) settlePose(Math.min(1,(now-t0)/SETTLE_MS),cross);
+      _m.compose(_p,_q,_s); A.setMatrixAt(n,_m);
       const base=palLin[p]||_c.set(0xffffff), v=neat?1:0.94+h2*0.1, lift=cross?0.02:0.055; _c.setRGB(lift+base.r*v*(1-lift),lift+base.g*v*(1-lift),lift+base.b*v*(1-lift)); A.setColorAt(n,_c); n++; } }
   o.A.count=o.B.count=n; A.instanceMatrix.needsUpdate=true; if(A.instanceColor) A.instanceColor.needsUpdate=true; }
-function disposeChunks(){ chunks.forEach(o=>{ [o.A,o.B].forEach(M=>{ scene.remove(M); M.dispose(); }); }); chunks.clear(); dirtyChunks.clear(); }
+/* посадка: страза опускается точно в свою клетку и чуть пружинит, крестик «прошивается» из центра */
+const SETTLE_MS=190, settle=new Map(), texHold=new Set(); // цветная основа под деталью проявляется в тот миг, когда деталь касается клетки
+const easeOut=x=>1-Math.pow(1-x,3);
+function settlePose(k,cross){ if(cross){ const e=k<1?1+2.2*Math.pow(k-1,3)+1.2*Math.pow(k-1,2):1; const xz=0.35+0.65*e; _s.x*=xz; _s.z*=xz; _s.y*=0.6+0.4*easeOut(k); return; }
+  const a=Math.min(1,k/0.62), b=k>0.62?(k-0.62)/0.38:0; _p.y+=0.32*(1-easeOut(a)); const sq=b>0?Math.sin(b*Math.PI)*0.16:0; _s.y*=1-sq; _s.x*=1+sq*0.35; _s.z*=1+sq*0.35; }
+function settleCells(list){ if(reduceMotion||!list.length) return; const now=performance.now(); for(const i of list){ settle.set(i,now); texHold.add(i); texCell(i); dirtyChunks.add(chunkOf(i)); } cellTexDirty=true; needRender=true; }
+function tickSettle(now){ let fin=false; const land=SETTLE_MS*(cur.type==="cross"?0.3:0.6); settle.forEach((t0,i)=>{ const a=now-t0; if(a>=land&&texHold.delete(i)){ texCell(i); cellTexDirty=true; } if(a>=SETTLE_MS){ settle.delete(i); fin=true; } dirtyChunks.add(chunkOf(i)); }); if(fin) shadowDirty=true; needRender=true; }
+function disposeChunks(){ settle.clear(); texHold.clear(); chunks.forEach(o=>{ [o.A,o.B].forEach(M=>{ scene.remove(M); M.dispose(); }); }); chunks.clear(); dirtyChunks.clear(); }
 function buildAllChunks(){ disposeChunks(); const has=new Set(); for(let i=0;i<cur.cells.length;i++) if(cur.cells[i]>=0) has.add(chunkOf(i)); has.forEach(k=>rebuildChunk(k)); ghostGeo(); }
 function restyleChunks(){ chunks.forEach(o=>{ o.A.geometry=geoFor(cur.type,shapeOf(cur),true); o.B.geometry=geoFor(cur.type,shapeOf(cur),false); o.A.material=o.B.material=matFor(cur.type,shapeOf(cur)); }); chunks.forEach((o,k)=>rebuildChunk(k)); U.uCross.value=cur.type==="cross"?1:0; ghostGeo(); shadowDirty=true; needRender=true; }
 function flushChunks(){ dirtyChunks.forEach(k=>rebuildChunk(k)); dirtyChunks.clear(); if(!stroke) shadowDirty=true; }
@@ -2064,7 +2111,7 @@ function updateLOD(){ const th=Math.tan(camera.fov*Math.PI/360); chunks.forEach(
 
 /* призрак: отпечаток насадки летит за пальцем, прилипает к клеткам и встаёт на место */
 let ghost=null;
-function ghostGeo(){ if(ghost){ scene.remove(ghost); ghost.dispose(); } ghost=new THREE.InstancedMesh(geoFor(cur.type,shapeOf(cur),true),ghostMat,25); ghost.count=0; ghost.visible=false; ghost.renderOrder=3; ghost.frustumCulled=false; scene.add(ghost); }
+function ghostGeo(){ if(ghost){ scene.remove(ghost); ghost.dispose(); } ghost=new THREE.InstancedMesh(geoFor(cur.type,shapeOf(cur),true),ghostMat,25); ghost.instanceMatrix.array.fill(0); ghost.count=0; ghost.visible=false; ghost.renderOrder=3; ghost.frustumCulled=false; scene.add(ghost); }
 const G={cells:[],lift:0,anim:null,t:0};
 function showGhost(cells,code,lift){ G.cells=cells; G.lift=lift; G.t=performance.now(); if(!ghost) return; if(!cells.length||!code){ ghost.visible=false; ghost.count=0; needRender=true; return; }
   ghostMat.color.set(hexOf(code)); ghostMat.emissive.set(hexOf(code)).multiplyScalar(0.18); let n=0;
@@ -2110,7 +2157,7 @@ function frame(now){ requestAnimationFrame(frame); if(ws.hidden||!cur) return;
   // холст всегда во всё окно: если размер окна поменялся незаметно для наблюдателя — подгоняем
   if(canvas.clientWidth&&(Math.abs(canvas.clientWidth-W_px)>1||Math.abs(canvas.clientHeight-H_px)>1)) resize();
   const mv=updateCamera(); if(dirtyChunks.size){ flushChunks(); needRender=true; } if(cellTexDirty){ cellTex.needsUpdate=true; cellTexDirty=false; needRender=true; }
-  if(hintOn&&sel&&isChart()){ U.uTime.value=now/1000; needRender=true; } if(G.anim){ tickGhost(now); needRender=true; } else if(ghost&&ghost.visible&&!outer&&!(gest&&gest.kind==="stamp"&&ptrs.size>0)&&now-G.t>700){ if(gest&&gest.kind==="stamp") gest=null; hideGhost(); }
+  if(hintOn&&sel&&isChart()){ U.uTime.value=now/1000; needRender=true; } if(settle.size) tickSettle(now); if(G.anim){ tickGhost(now); needRender=true; } else if(ghost&&ghost.visible&&!outer&&!(gest&&gest.kind==="stamp"&&ptrs.size>0)&&now-G.t>700){ if(gest&&gest.kind==="stamp") gest=null; hideGhost(); }
   if(mv||needRender){ const th=Math.tan(camera.fov*Math.PI/360); U.uPx.value=H_px/(2*camera.position.distanceTo(cam.t)*th); updateLOD();
     if(selCell>=0){ const c=selCell%W, r=(selCell-c)/W; selRing.position.set(c-W/2+0.5,0.03,r-H/2+0.5); selRing.visible=true; } else selRing.visible=false;
     if(shadowDirty&&now-lastShadow>110){ renderer.shadowMap.needsUpdate=true; shadowDirty=false; lastShadow=now; }
@@ -2144,19 +2191,21 @@ function redo(){ const ops=redoStack.pop(); if(!ops) return; applyOps(ops,false)
 /* ---------- Насадки: одна деталь, ряды 3 и 5, квадраты 2×2 … 5×5 ---------- */
 const TOOLS=[{id:"1",n:"Одна",w:1,h:1},{id:"r3",n:"Ряд 3",w:3,h:1},{id:"r5",n:"Ряд 5",w:5,h:1},{id:"s2",n:"2×2",w:2,h:2},{id:"s3",n:"3×3",w:3,h:3},{id:"s4",n:"4×4",w:4,h:4},{id:"s5",n:"5×5",w:5,h:5}];
 let tool=TOOLS.find(t=>t.id===ls.get("mystitch.tool"))||TOOLS[0], toolRot=ls.get("mystitch.rot")==="1", dragMode=ls.get("mystitch.dmode")||"stamp", fitChart=ls.get("mystitch.fit")!=="0";
-const LIFT=0.6;
+const LIFT=0.14; // отпечаток висит чуть над клетками — ровно над тем местом, куда сядет
 function footprint(center){ if(center<0||!cur||!sel) return []; let w=tool.w, h=tool.h; if(toolRot&&w!==h){ const t=w; w=h; h=t; }
   const c0=center%W, r0=(center-c0)/W, sx=-Math.floor((w-1)/2), sy=-Math.floor((h-1)/2), out=[], si=cur.pal.indexOf(sel), only=fitChart&&isChart()&&si>=0;
   for(let dy=0;dy<h;dy++) for(let dx=0;dx<w;dx++){ const c=c0+sx+dx, r=r0+sy+dy; if(c<0||r<0||c>=W||r>=H) continue; const i=r*W+c; if(cur.cells[i]>=0) continue; if(only&&cur.grid[i]!==si) continue; out.push(i); }
   return out; }
-function commitCells(list,sound){ if(!list.length) return false; const to=palIdx(sel); beginStroke(); let n=0; for(const i of list) if(cur.cells[i]<0&&setCell(i,to)) n++; endStroke(); if(n&&sound!==false) playClick("place"); return n>0; }
+function commitCells(list,sound){ if(!list.length) return false; const to=palIdx(sel); beginStroke(); const put=[]; for(const i of list) if(cur.cells[i]<0&&setCell(i,to)) put.push(i); endStroke(); settleCells(put);
+  // звук — в момент, когда деталь садится на место
+  if(put.length&&sound!==false) setTimeout(()=>playClick("place"),reduceMotion||cur.type==="cross"?20:SETTLE_MS*0.6); updateCountsUI(); return put.length>0; }
 let lastSnd=0, eraseOn=false;
 // ластик: убирает поставленное под отпечатком текущей насадки
 function eraseFoot(center){ let w=tool.w, h=tool.h; if(toolRot&&w!==h){ const t=w; w=h; h=t; } const c0=center%W, r0=(center-c0)/W, sx=-Math.floor((w-1)/2), sy=-Math.floor((h-1)/2), out=[];
   for(let dy=0;dy<h;dy++) for(let dx=0;dx<w;dx++){ const c=c0+sx+dx, r=r0+sy+dy; if(c<0||r<0||c>=W||r>=H) continue; const i=r*W+c; if(cur.cells[i]>=0) out.push(i); } return out; }
 function eraseAt(i){ const list=eraseFoot(i); if(!list.length) return; for(const j of list) setCell(j,-1); const now=performance.now(); if(now-lastSnd>40){ playClick("tick"); lastSnd=now; } needRender=true; }
 function setErase(on){ eraseOn=on; $("tErase").classList.toggle("on",on); $("tErase").setAttribute("aria-pressed",String(on)); canvas.classList.toggle("erase",on); if(on){ hideGhost(); if(handOn) setHand(false); } handSync(); }
-function stampAt(i){ const list=footprint(i); if(!list.length) return; const to=palIdx(sel); for(const j of list) setCell(j,to); const now=performance.now(); if(now-lastSnd>40){ playClick("place"); lastSnd=now; } needRender=true; }
+function stampAt(i){ const list=footprint(i); if(!list.length) return; const to=palIdx(sel); const put=[]; for(const j of list) if(setCell(j,to)) put.push(j); settleCells(put); if(!put.length) return; const now=performance.now(); if(now-lastSnd>40){ playClick("place"); lastSnd=now; } needRender=true; }
 function toolIcon(t,rot){ const c=document.createElement("canvas"); c.width=c.height=72; const g=c.getContext("2d"); let w=t.w,h=t.h; if(rot&&w!==h){ const x=w; w=h; h=x; } const s=Math.min(60/Math.max(w,h),22), ox=(72-w*s)/2, oy=(72-h*s)/2;
   for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const cx=ox+(x+0.5)*s, cy=oy+(y+0.5)*s, r=s*0.42; const gr=g.createRadialGradient(cx-r*0.3,cy-r*0.35,1,cx,cy,r); gr.addColorStop(0,"#ffffff"); gr.addColorStop(0.5,"#b9c7dc"); gr.addColorStop(1,"#6d7c93"); g.fillStyle=gr; g.beginPath(); g.roundRect?g.roundRect(cx-r,cy-r,2*r,2*r,r*0.35):g.rect(cx-r,cy-r,2*r,2*r); g.fill(); }
   return c.toDataURL(); }
@@ -2205,11 +2254,11 @@ canvas.addEventListener("pointermove",e=>{ const p=posOf(e);
   if(gest.kind==="paint"){ const i=cellAt(p.x,p.y); if(i<0||i===gest.last) return; const path=gest.last>=0?cellsLine(gest.last,i):[i]; path.forEach(stampAt); gest.last=i; updateCountsUI(); } });
 const up=e=>{ if(!ptrs.has(e.pointerId)) return; ptrs.delete(e.pointerId); canvas.classList.remove("grabbing"); if(!gest){ hideGhost(); return; }
   if(gest.kind==="two"){ if(ptrs.size<2){ gest=null; } return; }
-  if(gest.kind==="pend"){ const g=gest; startPut(g); }
+  if(gest.kind==="pend"){ const g=gest; clearTimeout(pendT); if(dragMode==="stamp"){ gest=null; hideGhost(); commitCells(footprint(g.cell)); return; } startPut(g); }
   const g=gest; gest=null;
   if(g.kind==="orbit"){ if(!g.moved&&g.cell>=0){ if(cur.cells[g.cell]>=0) selectCell(g.cell); else if(!sel&&!handOn) toast("Выберите цвет в панели — и касайтесь клеток"); } return; }
   if(g.kind==="tap"){ selectCell(g.cell); return; }
-  if(g.kind==="stamp"){ const cells=G.cells.slice(); if(!cells.length){ hideGhost(); return; } dropGhost(cells,sel,()=>{ commitCells(cells); }); return; }
+  if(g.kind==="stamp"){ const cells=G.cells.slice(); hideGhost(); if(cells.length) commitCells(cells); return; }
   if(g.kind==="paint"||g.kind==="erase") endStroke(); };
 canvas.addEventListener("pointerup",up); canvas.addEventListener("pointercancel",e=>{ clearTimeout(pendT); if(gest&&gest.kind==="pend"){ gest=null; ptrs.delete(e.pointerId); return; } if(gest&&gest.kind==="stamp"){ gest=null; hideGhost(); ptrs.delete(e.pointerId); return; } up(e); });
 canvas.addEventListener("pointerleave",e=>{ if(e.pointerType==="mouse"&&!gest&&!outer) hideGhost(); });
@@ -2225,10 +2274,11 @@ document.addEventListener("keydown",e=>{ if(ws.hidden||!cur||e.target.matches("i
 
 /* перенос цвета из панели прямо на стол — как деталь в MyBlocks */
 let outer=null;
-function startOuterDrag(e,code){ if(e.pointerType==="mouse"&&e.button!==0) return; e.preventDefault(); selectColor(code); outer={id:e.pointerId,x:e.clientX,y:e.clientY,started:false}; }
-document.addEventListener("pointermove",e=>{ if(!outer||e.pointerId!==outer.id) return; if(!outer.started&&Math.hypot(e.clientX-outer.x,e.clientY-outer.y)<8) return; outer.started=true; document.body.classList.add("dragging");
+// мышью — тянем сразу; пальцем — только если повели вбок, к полотну (вертикальный жест прокручивает список)
+function startOuterDrag(e,code){ if(e.pointerType==="mouse"){ if(e.button!==0) return; e.preventDefault(); selectColor(code); } outer={id:e.pointerId,x:e.clientX,y:e.clientY,started:false,code,touch:e.pointerType!=="mouse"}; }
+document.addEventListener("pointermove",e=>{ if(!outer||e.pointerId!==outer.id) return; if(!outer.started){ const dx=Math.abs(e.clientX-outer.x), dy=Math.abs(e.clientY-outer.y); if(Math.hypot(dx,dy)<10) return; if(outer.touch&&dy>dx*0.8){ outer=null; return; } if(outer.touch) selectColor(outer.code); } outer.started=true; document.body.classList.add("dragging");
   const el=document.elementFromPoint(e.clientX,e.clientY); if(el===canvas){ const r=canvas.getBoundingClientRect(), i=cellAt(e.clientX-r.left,e.clientY-r.top); showGhost(i<0?[]:footprint(i),sel,LIFT); } else hideGhost(); });
-const outerEnd=e=>{ if(!outer||e.pointerId!==outer.id) return; const o=outer; outer=null; document.body.classList.remove("dragging"); if(!o.started) return; const cells=G.cells.slice(); if(cells.length) dropGhost(cells,sel,()=>commitCells(cells)); else hideGhost(); };
+const outerEnd=e=>{ if(!outer||e.pointerId!==outer.id) return; const o=outer; outer=null; document.body.classList.remove("dragging"); if(!o.started) return; const cells=G.cells.slice(); hideGhost(); if(cells.length) commitCells(cells); };
 document.addEventListener("pointerup",outerEnd); document.addEventListener("pointercancel",outerEnd);
 
 /* ---------- Панель цветов: в схеме — цвета, что видны на экране, поднимаются наверх; в своей вышивке — вся палитра ---------- */
@@ -2252,16 +2302,22 @@ function itemEl(code,i,extra){ const el=document.createElement("div"); el.classN
 function renderList(){ const box=$("list"), st=box.scrollTop; box.innerHTML=""; itemEls.clear(); if(!cur) return; const q=query.trim().toLowerCase();
   const match=code=>!q||code.toLowerCase().indexOf(q)>=0||colorOf(code).name.indexOf(q)>=0; const frag=document.createDocumentFragment();
   const head=t=>{ const h=document.createElement("div"); h.className="group-h"; h.textContent=t; frag.appendChild(h); };
-  if(isChart()){ let rows=cur.pal.map((code,i)=>({code,i})).filter(({code,i})=>counts.target[i]>0&&match(code)&&(chip==="all"||(chip==="left"?counts.ok[i]<counts.target[i]:counts.ok[i]>=counts.target[i])));
-    const vis=visList&&!q&&chip!=="done"?visList.filter(v=>rows.some(r=>r.code===v.code)):null;
-    if(vis&&vis.length){ head("На экране"); vis.forEach(v=>{ const el=itemEl(v.code,cur.pal.indexOf(v.code),v.k+" на экране"); el.classList.add("it0"); itemEls.set("v:"+v.code,el); frag.appendChild(el); }); head("Все цвета схемы"); }
-    rows.forEach(({code,i})=>{ const el=itemEl(code,i); itemEls.set(code,el); frag.appendChild(el); }); if(!rows.length){ const e=document.createElement("div"); e.className="empty"; e.textContent=q?"Такого цвета нет":chip==="left"?"Всё поставлено — работа готова":"Готовых цветов пока нет"; frag.appendChild(e); } }
+  if(isChart()){ const isDone=i=>counts.ok[i]>=counts.target[i]; let rows=cur.pal.map((code,i)=>({code,i})).filter(({code,i})=>counts.target[i]>0&&match(code)&&(chip==="all"||(chip==="left"?!isDone(i):isDone(i))));
+    // незаполненные — наверху, готовые опускаются вниз
+    const todo=rows.filter(r=>!isDone(r.i)), fin=rows.filter(r=>isDone(r.i)); rows=todo.concat(fin);
+    const vis=visList&&!q&&chip!=="done"?visList.filter(v=>todo.some(r=>r.code===v.code)):null;
+    if(vis&&vis.length){ head("На экране"); vis.forEach(v=>{ const el=itemEl(v.code,cur.pal.indexOf(v.code),v.k+" на экране"); el.classList.add("it0"); itemEls.set("v:"+v.code,el); frag.appendChild(el); }); if(todo.length) head("Осталось поставить"); }
+    todo.forEach(({code,i})=>{ const el=itemEl(code,i); itemEls.set(code,el); frag.appendChild(el); });
+    if(fin.length&&chip==="all") head("Готово"); fin.forEach(({code,i})=>{ const el=itemEl(code,i); itemEls.set(code,el); frag.appendChild(el); });
+    lastDoneKey=doneKey(); if(!rows.length){ const e=document.createElement("div"); e.className="empty"; e.textContent=q?"Такого цвета нет":chip==="left"?"Всё поставлено — работа готова":"Готовых цветов пока нет"; frag.appendChild(e); } }
   else { const used=DMC.map(([code])=>code).filter(code=>{ const i=cur.pal.indexOf(code); return i>=0&&counts.placed[i]>0; });
     if(chip==="all"&&used.length&&!q){ head("В работе"); used.forEach(code=>{ const el=itemEl(code,cur.pal.indexOf(code)); el.classList.add("it0"); itemEls.set("u:"+code,el); frag.appendChild(el); }); head("Вся палитра мулине"); }
     const rows=DMC.map(([code])=>code).filter(code=>match(code)&&(chip==="all"||used.includes(code))); rows.forEach(code=>{ const el=itemEl(code,cur.pal.indexOf(code)); itemEls.set(code,el); frag.appendChild(el); });
     if(!rows.length){ const e=document.createElement("div"); e.className="empty"; e.textContent=q?"Такого цвета нет":"Пока ничего не поставлено"; frag.appendChild(e); } }
   box.appendChild(frag); box.scrollTop=st; updateCountsUI(); }
-function updateCountsUI(){ if(!cur) return; cancelAnimationFrame(listT); listT=requestAnimationFrame(()=>{
+let lastDoneKey="";
+function doneKey(){ if(!cur||!isChart()) return ""; let s=""; for(let i=0;i<cur.pal.length;i++) s+=counts.ok[i]>=counts.target[i]?"1":"0"; return s; }
+function updateCountsUI(){ if(!cur) return; cancelAnimationFrame(listT); listT=requestAnimationFrame(()=>{ if(isChart()&&doneKey()!==lastDoneKey){ renderList(); return; }
   if(isChart()){ $("statLbl").innerHTML='Поставлено <b class="mono" id="statN"></b> из <span class="mono" id="statT"></span>'; $("statN").textContent=counts.okAll.toLocaleString("ru-RU"); $("statT").textContent=counts.total.toLocaleString("ru-RU"); $("statFill").style.width=(counts.total?counts.okAll/counts.total*100:0)+"%"; }
   else { $("statLbl").innerHTML='Поставлено <b class="mono" id="statN"></b> · '+cmOf(W,cur.type)+"×"+cmOf(H,cur.type)+" см"; $("statN").textContent=counts.placedAll.toLocaleString("ru-RU"); $("statFill").style.width=(counts.placedAll/cur.cells.length*100)+"%"; }
   itemEls.forEach((el,key)=>{ const code=el.dataset.code, i=cur.pal.indexOf(code); if(isChart()){ const ok=i>=0?counts.ok[i]:0, t=i>=0?counts.target[i]:0, done=ok>=t; el.classList.toggle("done",done&&!key.startsWith("v:")); el.querySelector(".cnt").textContent=ok+" / "+t; el.querySelector(".meta").textContent="DMC "+code+(done?" · готово":" · осталось "+(t-ok));
@@ -2506,6 +2562,7 @@ function enterChart(id){ const C=CHARTS.get(id); if(!C){ location.hash=""; setTi
 const segBuild=(box,vals,cur_,fmt,onPick)=>{ box.innerHTML=""; vals.forEach(v=>{ const b=document.createElement("button"); b.dataset.v=String(v); b.textContent=fmt(v); b.classList.toggle("on",v===cur_); b.addEventListener("click",()=>onPick(v)); box.appendChild(b); }); };
 function mdSync(){ const C=MC; segSync("mdType",C.type); segSync("mdShape",C.shape); segSync("mdStitch",C.stitch||"cross"); $("mdShapeRow").hidden=C.type!=="diamond"; $("mdStitchRow").hidden=C.type!=="cross";
   if(!C.cm) C.cm=40; C.cm=clamp(C.cm,10,TYPES[C.type].maxCm); const r=$("mdCm"); r.max=TYPES[C.type].maxCm; r.value=C.cm; $("mdCol").value=C.colors;
+  { const sc=document.querySelector("#scrModel .rng-scale span:last-child"); if(sc) sc.textContent=TYPES[C.type].maxCm+" см · детальнее"; }
   const ww=cellsFor(C.cm,C.type), hh=chartH(C,ww); $("mdCmOut").textContent=cmOf(ww,C.type)+" × "+cmOf(hh,C.type)+" см"; $("mdSizeNote").textContent=ww+"×"+hh+" "+(C.type==="diamond"?"страз":"крестиков")+" в ряду и столбце"; $("mdColOut").textContent=String(C.colors);
   $("mdDesc").textContent=C.type==="diamond"?"Алмазная мозаика: на основу с клеевым слоем и напечатанной схемой ставите "+(C.shape==="round"?"круглые":"квадратные")+" стразы, каждая — в свою клетку по символу.":(C.stitch==="tent"?"Гобелен: каждая клетка канвы — один плотный косой стежок (полукрест) нужного цвета мулине.":"Вышивка крестиком: каждая клетка канвы аида — один пушистый крестик нужного цвета мулине, по символу на схеме.");
   const list=worksOf(C.id), cta=$("mdCta"); cta.innerHTML="";
@@ -2521,8 +2578,11 @@ $("mdCol").addEventListener("input",e=>{ MC.colors=+e.target.value; mdSync(); cl
 document.querySelectorAll("#mdShape button").forEach(b=>b.addEventListener("click",()=>{ MC.shape=b.dataset.v; Store.putChart(MC); mdSync(); mdDraw(); }));
 document.querySelectorAll("#mdStitch button").forEach(b=>b.addEventListener("click",()=>{ MC.stitch=b.dataset.v; Store.putChart(MC); mdSync(); mdDraw(); }));
 document.querySelectorAll("#mdToggle button").forEach(b=>b.addEventListener("click",()=>{ mdView=b.dataset.v; document.querySelectorAll("#mdToggle button").forEach(x=>x.classList.toggle("on",x===b)); mdDraw(); }));
-async function mdRecalc(){ const C=MC, tk=++mdBusy; mdChart=null; mdDraw(); $("mdStats").innerHTML=""; $("mdParts").innerHTML='<p class="empty-note">Подбираю цвета…</p>'; await nextFrame(); if(tk!==mdBusy||MC!==C) return;
-  let ch=null; try{ ch=await chartFor(C,cellsFor(C.cm,C.type),C.colors); }catch(_){ $("mdParts").innerHTML='<p class="empty-note">Не получилось прочитать картинку</p>'; return; } if(tk!==mdBusy||MC!==C) return; mdChart=ch; mdDraw();
+async function mdRecalc(){ const C=MC, tk=++mdBusy, host=$("scrModel");
+  // пока считается новая схема, старая остаётся на месте (чуть приглушённой) — страница не прыгает и не замирает
+  if(!mdChart||mdChart.src!==C.id){ mdChart=null; mdDraw(); $("mdStats").innerHTML=""; $("mdParts").innerHTML='<p class="empty-note">Подбираю цвета…</p>'; } host.classList.add("md-busy");
+  await nextFrame(); if(tk!==mdBusy||MC!==C) return;
+  let ch=null; try{ ch=await chartFor(C,cellsFor(C.cm,C.type),C.colors); }catch(_){ host.classList.remove("md-busy"); $("mdParts").innerHTML='<p class="empty-note">Не получилось прочитать картинку</p>'; return; } if(tk!==mdBusy||MC!==C) return; host.classList.remove("md-busy"); ch.src=C.id; mdChart=ch; mdDraw();
   const cnt=new Array(ch.pal.length).fill(0); ch.grid.forEach(t=>{ if(t>=0) cnt[t]++; }); const n=cnt.reduce((a,b)=>a+b,0);
   $("mdStats").innerHTML=""; [[cmOf(ch.w,C.type)+"×"+cmOf(ch.h,C.type),"см"],[ch.pal.length,plural(ch.pal.length,"цвет","цвета","цветов")],[n.toLocaleString("ru-RU"),plural(n,...TYPES[C.type].units)],[timeLabel(n,C.type),"примерно"]].forEach(([v,l])=>{ const s=document.createElement("div"); s.className="stat"; s.innerHTML='<div class="v"></div><div class="l"></div>'; s.querySelector(".v").textContent=v; s.querySelector(".l").textContent=l; $("mdStats").appendChild(s); });
   const box=$("mdParts"); box.innerHTML=""; ch.pal.forEach((code,i)=>{ const r=document.createElement("div"); r.className="prow"; r.innerHTML='<span class="sym"></span><span class="n"></span><span class="q"></span>'; symTile(r.querySelector(".sym"),code,i,true); r.querySelector(".n").innerHTML=esc(colorOf(code).name)+'<span class="code">DMC '+esc(code)+'</span>'; r.querySelector(".q").textContent=cnt[i]; box.appendChild(r); }); }
@@ -2538,7 +2598,7 @@ new ResizeObserver(()=>{ if(mode==="chart") mdDraw(); }).observe($("mdViewer"));
 let mdDelArmed=false;
 $("mdDelete").addEventListener("click",async()=>{ if(!MC) return; if(!mdDelArmed){ mdDelArmed=true; $("mdDelete").lastChild.textContent="Точно удалить схему и её работы?"; return; }
   const id=MC.id; for(const w of worksOf(id)){ WORKS.delete(w.id); await Store.delWork(w.id); } CHARTS.delete(id); await Store.delChart(id); toast("Схема удалена"); location.hash=""; });
-async function startFromChart(){ const C=MC; let ch=mdChart; if(!ch){ try{ ch=await chartFor(C,C.width,C.colors); }catch(_){ toast("Не получилось прочитать картинку"); return; } }
+async function startFromChart(){ const C=MC; let ch=null; { try{ ch=await chartFor(C,cellsFor(C.cm,C.type),C.colors); }catch(_){ toast("Не получилось прочитать картинку"); return; } }
   const n=worksOf(C.id).length; const w={id:newId("w"),chart:C.id,name:C.name+(n?" · "+(n+1):""),type:C.type,shape:C.shape,stitch:C.stitch||"cross",fabric:C.type==="cross"?"ecru":"white",glow:"warm",w:ch.w,h:ch.h,pal:ch.pal.slice(),grid:Int16Array.from(ch.grid),cells:new Int16Array(ch.w*ch.h).fill(-1),opts:{cm:C.cm,colors:C.colors},step:0,updated:Date.now(),count:0,thumb:null};
   WORKS.set(w.id,w); await Store.putWork(w); location.hash="work-"+w.id; }
 
@@ -2667,7 +2727,7 @@ window.addEventListener("unhandledrejection",e=>{ if(!bootDone) bootFail(e.reaso
 async function boot(){ try{ await IDB.open(); }catch(_){} await Store.load(); route(); bootDone=true; loaderHide(); requestAnimationFrame(frame);
   try{ if(navigator.storage&&navigator.storage.persisted&&!(await navigator.storage.persisted())) navigator.storage.persist().catch(()=>{}); }catch(_){} }
 window.__dbg=()=>({cam:{t:cam.t.toArray(),r:cam.r,phi:cam.phi,theta:cam.theta},g:{t:cam.g.t.toArray(),r:cam.g.r},W,H,Wp:W_px,Hp:H_px});
-window.__ms={state:()=>cur&&{w:W,h:H,pal:cur.pal.length,placed:counts.placedAll,ok:counts.okAll,total:counts.total,sel,step:cur.step,blocks:blocks.length,tool:tool.id},cellXY:i=>{ const r=canvas.getBoundingClientRect(), p=cellScreen(i); return [r.left+p[0],r.top+p[1]]; },firstOf:code=>{ const si=cur.pal.indexOf(code); return cur.grid.findIndex((t,i)=>t===si&&cur.cells[i]<0); },fillAll:()=>{ beginStroke(); for(let i=0;i<cur.grid.length;i++) if(cur.grid[i]>=0) setCell(i,cur.grid[i]); endStroke(); },fillBlock:()=>{ const b=curBlock(); beginStroke(); for(let r=b.y0;r<b.y1;r++) for(let c=b.x0;c<b.x1;c++){ const i=r*W+c; if(cur.grid[i]>=0) setCell(i,cur.grid[i]); } endStroke(); },cam:(th,ph,r,x,z)=>{ camGo(new THREE.Vector3(x||0,0,z||0),r,ph,th,true); },tool:id=>setTool(TOOLS.find(t=>t.id===id)),mode:m=>{ dragMode=m; handSync(); },vis:()=>visList&&visList.map(v=>v.code),ghost:()=>!!(ghost&&ghost.visible),okCell:i=>cur.cells[i]<0&&cur.grid[i]===cur.pal.indexOf(sel),info:()=>({calls:renderer.info.render.calls,tris:renderer.info.render.triangles})};
+window.__ms={state:()=>cur&&{w:W,h:H,pal:cur.pal.length,placed:counts.placedAll,ok:counts.okAll,total:counts.total,sel,step:cur.step,blocks:blocks.length,tool:tool.id},cellXY:i=>{ const r=canvas.getBoundingClientRect(), p=cellScreen(i); return [r.left+p[0],r.top+p[1]]; },firstOf:code=>{ const si=cur.pal.indexOf(code); return cur.grid.findIndex((t,i)=>t===si&&cur.cells[i]<0); },fillAll:()=>{ beginStroke(); for(let i=0;i<cur.grid.length;i++) if(cur.grid[i]>=0) setCell(i,cur.grid[i]); endStroke(); },fillBlock:()=>{ const b=curBlock(); beginStroke(); for(let r=b.y0;r<b.y1;r++) for(let c=b.x0;c<b.x1;c++){ const i=r*W+c; if(cur.grid[i]>=0) setCell(i,cur.grid[i]); } endStroke(); },cam:(th,ph,r,x,z)=>{ camGo(new THREE.Vector3(x||0,0,z||0),r,ph,th,true); },tool:id=>setTool(TOOLS.find(t=>t.id===id)),mode:m=>{ dragMode=m; handSync(); },vis:()=>visList&&visList.map(v=>v.code),ghost:()=>!!(ghost&&ghost.visible),fillCode:code=>{ const si=cur.pal.indexOf(code); beginStroke(); for(let i=0;i<cur.grid.length;i++) if(cur.grid[i]===si) setCell(i,si); endStroke(); updateCountsUI(); },okCell:i=>cur.cells[i]<0&&cur.grid[i]===cur.pal.indexOf(sel),info:()=>({calls:renderer.info.render.calls,tris:renderer.info.render.triangles})};
 boot();
 })();
 </script>
