@@ -1110,6 +1110,52 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 /* окошко цвета (фон, цвет в руке) — всегда справа, под кнопками верхней полосы */
 #ws .palette,#ws.side-l .palette{left:auto;right:max(12px, env(safe-area-inset-right, 0px))}
 #ws.side-l:has(#edit:not([hidden])) .palette{right:max(12px, env(safe-area-inset-right, 0px))}
+
+/* страница схемы: настройки компактнее */
+.scr .d-info .eyebrow{margin:22px 0 10px}
+.scr .d-info .stats{margin-top:20px;padding:12px 0}
+.scr .opt-seg{margin-bottom:0}
+.scr .opt-seg button{min-height:40px}
+.scr .rng{margin-bottom:2px}
+.scr .rng input{height:26px}
+.rng-scale{margin:0 0 4px}
+.scr .d-info .cta{margin-top:24px}
+.scr .d-info .ins-note{font-size:12px;line-height:1.5;color:var(--faint);margin-top:10px}
+@media (min-width:861px) and (max-width:1400px){ .scr .detail{grid-template-columns:minmax(0,5fr) minmax(0,6fr);gap:28px} .scr .d-info .eyebrow{margin:18px 0 8px} }
+
+/* телефон: панель цветов — низкая, плотная, в две колонки */
+@media (max-width:600px){
+  #ws #libPop{height:min(33%,300px);bottom:calc(8px + env(safe-area-inset-bottom, 0px))}
+  #ws.lib-open .hand,#ws.m-play .hand{bottom:calc(min(33%,300px) + 16px + env(safe-area-inset-bottom, 0px))}
+  #libPop .lib-head{flex-direction:row;flex-wrap:wrap;align-items:center;gap:6px 8px;padding:8px 10px 6px}
+  #libPop .search{flex:1 1 180px;width:auto;height:32px;border-radius:10px;font-size:13px}
+  #libPop .chips{flex:none;gap:4px}
+  #libPop .chip{padding:5px 10px;font-size:11.5px}
+  #libPop .lib-stat{flex:1 1 100%;font-size:11px;gap:8px}
+  #libPop .track{height:3px}
+  #libPop .lib-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));align-content:start;gap:2px 4px;padding:4px 6px 8px}
+  #libPop .group-h{grid-column:1/-1;padding:6px 6px 2px;font-size:10px}
+  #libPop .item{gap:8px;padding:3px 4px;border-radius:10px}
+  #libPop .thumb.sym{width:34px;height:34px;border-radius:8px;font-size:15px}
+  #libPop .thumb.sym .ok{width:11px;height:11px;right:1px;bottom:1px}
+  #libPop .thumb.sym .ok svg{width:8px;height:8px}
+  #libPop .item .nm{font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  #libPop .item .need{font-size:9.5px;padding:0 5px;margin-left:4px}
+  #libPop .item .meta{font-size:10px;margin-top:1px}
+  #libPop .item .cnt{display:none}
+}
+@media (max-width:600px){
+  #libPop .lib-list{grid-template-columns:repeat(2,minmax(0,1fr))}
+  #libPop .search{flex-basis:100%}
+}
+/* вертикальный планшет: панель — карточка внизу сбоку, как в MyBlocks; список в одну колонку */
+@media (min-width:601px) and (max-width:860px){
+  #tSide{display:grid}
+  #ws #libPop,#ws.side-l #libPop{top:auto;width:340px;height:40%;bottom:calc(12px + env(safe-area-inset-bottom, 0px))}
+  #ws #libPop{left:auto;right:max(12px, env(safe-area-inset-right, 0px))}
+  #ws.side-l #libPop{right:auto;left:max(12px, env(safe-area-inset-left, 0px))}
+  #ws.lib-open .hand,#ws.side-l.lib-open .hand,#ws.m-play .hand{bottom:calc(40% + 22px + env(safe-area-inset-bottom, 0px))}
+}
 </style>
 </head>
 <body>
@@ -1718,11 +1764,31 @@ let W=1,H=1;
   scene.environment=pm.fromScene(es,0.015).texture; pm.dispose(); })();
 
 /* свет над мозаикой — как в MyBlocks: кнопка с лампочкой переставляет его по кругу */
-const LIGHTS=[{n:"как было",d:[0.38,1,-0.52],k:1.5,f:0.3},{n:"из-за спины",cam:1,k:1.4,f:0.25},{n:"сверху",d:[0.04,1,0.06],k:1.4,f:0.3},{n:"слева",d:[-1,0.62,0.18],k:1.6,f:0.25},{n:"справа",d:[1,0.62,0.18],k:1.6,f:0.25},{n:"низкое вечернее",d:[0.55,0.3,-0.8],k:1.8,f:0.18,col:0xffdcb4},{n:"мягкий",d:[0.2,1,0.35],k:0.8,f:0.6}];
+const LIGHTS=[{n:"как было",d:[0.38,1,-0.52],k:1.5,f:0.3},{n:"из-за спины",cam:1,k:1.4,f:0.25},{n:"сверху",d:[0.04,1,0.06],k:1.4,f:0.3},{n:"слева",d:[-1,0.62,0.18],k:1.6,f:0.25},{n:"справа",d:[1,0.62,0.18],k:1.6,f:0.25},{n:"низкое вечернее",d:[0.55,0.3,-0.8],k:1.8,f:0.18,col:0xffdcb4},{n:"мягкий",d:[0.2,1,0.35],k:0.8,f:0.6},
+ // положения для страз: свет с той стороны, откуда грани отражают его прямо в глаз
+ {n:"навстречу взгляду",cam:1,co:Math.PI,cy:0.55,k:1.8,f:0.2,env:2.4},
+ {n:"из-за плеча слева",cam:1,co:-0.7,cy:0.9,k:1.6,f:0.25},
+ {n:"контровой сзади",d:[0,0.45,-1],k:1.9,f:0.2,env:2.4},
+ {n:"сзади слева",d:[-0.8,0.6,-0.75],k:1.7,f:0.22,env:2.2},
+ {n:"сзади справа",d:[0.8,0.6,-0.75],k:1.7,f:0.22,env:2.2},
+ {n:"спереди слева",d:[-0.8,0.6,0.75],k:1.6,f:0.25},
+ {n:"спереди справа",d:[0.8,0.6,0.75],k:1.6,f:0.25},
+ {n:"низко слева",d:[-1,0.24,0.08],k:2.1,f:0.15,env:2.2},
+ {n:"низко справа",d:[1,0.24,0.08],k:2.1,f:0.15,env:2.2},
+ {n:"скользящий",d:[0.25,0.12,-1],k:2.4,f:0.12,env:2.4},
+ {n:"с двух сторон",d:[-1,0.55,0],k:1.3,f:0.12,env:2.2,x:[[[1,0.55,0],0xfff5e8,1.3]]},
+ {n:"кольцо по кругу",d:[0.02,1,0.02],k:1.2,f:0.1,env:2.5,x:[[[1,0.35,0],0xfff5e8,0.9],[[-1,0.35,0],0xfff5e8,0.9],[[0,0.35,1],0xfff5e8,0.9],[[0,0.35,-1],0xfff5e8,0.9]]}];
+// значок положения: стол сверху, вы — снизу; светлая точка — откуда светит
+function lightSwatch(L){ const spots=[]; const at=(x,z,y)=>{ const l=Math.hypot(x,z)||1, r=Math.min(1,l/Math.hypot(x,y,z))*40; spots.push([50+x/l*r,50+z/l*r]); };
+  if(L.cam){ const a=(L.co==null?0.5:L.co); at(Math.sin(a),Math.cos(a),L.cy||1.15); } else at(L.d[0],L.d[2],L.d[1]); (L.x||[]).forEach(x=>at(x[0][0],x[0][2],x[0][1]));
+  const c=L.col?"#"+L.col.toString(16).padStart(6,"0"):"#fff";
+  return spots.map(([x,y])=>"radial-gradient(circle at "+x.toFixed(0)+"% "+y.toFixed(0)+"%,"+c+" 0 9%,rgba(255,255,255,.35) 14%,transparent 30%)").join(",")+",radial-gradient(circle at 50% 50%,#55525e 0 22%,#2b2a31 23%)"; }
+const LIGHT_SW=LIGHTS.map(lightSwatch);
 let lightMode=clamp(+(ls.get("mystitch.light")||0)||0,0,LIGHTS.length-1);
 const hemi=new THREE.HemisphereLight(0xffffff,0x3b322b,0.25); scene.add(hemi);
 const key=new THREE.DirectionalLight(0xfff5e8,2.3); key.castShadow=true; key.shadow.mapSize.set(4096,4096); key.shadow.bias=-0.00025; key.shadow.normalBias=0.015; key.shadow.radius=2.5; scene.add(key,key.target);
 const fill=new THREE.DirectionalLight(0xdfe8ff,0.5); scene.add(fill,fill.target);
+const xLights=[0,1,2,3].map(()=>{ const l=new THREE.DirectionalLight(0xffffff,0); scene.add(l,l.target); return l; });
 
 /* текстуры: дерево стола, волокна нити, мягкое свечение подсветки, символы схемы */
 function woodTexture(){ const c=document.createElement("canvas"); c.width=c.height=1024; const g=c.getContext("2d");
@@ -1966,7 +2032,8 @@ function texCell(i){ const d=cellTex.image.data, t=cur.grid?cur.grid[i]:-1, p=cu
 function applyFabric(){ const F=fabricOf(cur.fabric); paperMat.color.set(F.hex); needRender=true; }
 function applyGlow(){ const G=glowOf(cur.glow), k=(cur.glowK==null?70:cur.glowK)/100; if(G.hex&&k>0){ const c=new THREE.Color(G.hex); U.uGlow.value.copy(c).multiplyScalar(0.26*k); padMat.emissive.copy(c).multiplyScalar(0.95*k); haloMat.color.copy(c); halo.visible=false; } else { U.uGlow.value.setRGB(0,0,0); padMat.emissive.setRGB(0,0,0); halo.visible=false; } needRender=true; }
 function placeLights(){ const L=LIGHTS[lightMode]||LIGHTS[0]; key.intensity=L.k; fill.intensity=L.f; key.color.set(L.col||0xfff5e8); const d=new THREE.Vector3();
-  if(L.cam) d.set(Math.sin(cam.theta+0.5),1.15,Math.cos(cam.theta+0.5)); else d.fromArray(L.d); d.normalize();
+  gemMat.envMapIntensity=2.0*(L.env?L.env/2:1); xLights.forEach((l,i)=>{ const x=L.x&&L.x[i]; if(!x){ l.intensity=0; return; } const v=new THREE.Vector3().fromArray(x[0]).normalize(); l.position.copy(v).multiplyScalar(S*2+50); l.color.set(x[1]); l.intensity=x[2]; });
+  if(L.cam){ const a=cam.theta+(L.co==null?0.5:L.co); d.set(Math.sin(a),L.cy||1.15,Math.cos(a)); } else d.fromArray(L.d); d.normalize();
   key.position.copy(d).multiplyScalar(S*2.2+60); key.target.position.set(0,0,0); fill.position.set(-d.x,0.6,-d.z).multiplyScalar(S*2+50); shadowDirty=true; needRender=true; }
 
 /* поставленные детали: полотно поделено на куски 32×32, у каждого свой набор экземпляров — далёкие куски рисуются просто, невидимые не рисуются */
@@ -2043,7 +2110,7 @@ function frame(now){ requestAnimationFrame(frame); if(ws.hidden||!cur) return;
   // холст всегда во всё окно: если размер окна поменялся незаметно для наблюдателя — подгоняем
   if(canvas.clientWidth&&(Math.abs(canvas.clientWidth-W_px)>1||Math.abs(canvas.clientHeight-H_px)>1)) resize();
   const mv=updateCamera(); if(dirtyChunks.size){ flushChunks(); needRender=true; } if(cellTexDirty){ cellTex.needsUpdate=true; cellTexDirty=false; needRender=true; }
-  if(hintOn&&sel&&isChart()){ U.uTime.value=now/1000; needRender=true; } if(G.anim){ tickGhost(now); needRender=true; } else if(ghost&&ghost.visible&&!outer&&!(gest&&gest.kind==="stamp")&&now-G.t>700) hideGhost();
+  if(hintOn&&sel&&isChart()){ U.uTime.value=now/1000; needRender=true; } if(G.anim){ tickGhost(now); needRender=true; } else if(ghost&&ghost.visible&&!outer&&!(gest&&gest.kind==="stamp"&&ptrs.size>0)&&now-G.t>700){ if(gest&&gest.kind==="stamp") gest=null; hideGhost(); }
   if(mv||needRender){ const th=Math.tan(camera.fov*Math.PI/360); U.uPx.value=H_px/(2*camera.position.distanceTo(cam.t)*th); updateLOD();
     if(selCell>=0){ const c=selCell%W, r=(selCell-c)/W; selRing.position.set(c-W/2+0.5,0.03,r-H/2+0.5); selRing.visible=true; } else selRing.visible=false;
     if(shadowDirty&&now-lastShadow>110){ renderer.shadowMap.needsUpdate=true; shadowDirty=false; lastShadow=now; }
@@ -2105,7 +2172,7 @@ canvas.addEventListener("touchstart",e=>{ if(e.cancelable) e.preventDefault(); }
 function cellsLine(a,b){ const ac=a%W, ar=(a-ac)/W, bc=b%W, br=(b-bc)/W, n=Math.max(Math.abs(bc-ac),Math.abs(br-ar)), o=[]; for(let k=1;k<=n;k++){ o.push(Math.round(ar+(br-ar)*k/n)*W+Math.round(ac+(bc-ac)*k/n)); } return o; }
 canvas.addEventListener("pointerdown",e=>{ if(!cur) return; const p=posOf(e); ptrs.set(e.pointerId,p); try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
   hideSetPop(); hidePalette();
-  if(ptrs.size===2){ if(gest&&gest.kind==="paint") endStroke(); if(gest&&gest.kind==="stamp") hideGhost(); const [a,b]=[...ptrs.values()]; gest={kind:"two",d:Math.hypot(a.x-b.x,a.y-b.y),mid:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},ang:Math.atan2(b.y-a.y,b.x-a.x)}; canvas.classList.add("grabbing"); return; }
+  if(ptrs.size===2){ clearTimeout(pendT); if(gest&&gest.kind==="paint"){ if(performance.now()-(gest.t0||0)<350&&stroke&&stroke.length<=25){ applyOps(stroke,true); stroke=null; flushChunks(); updateCountsUI(); needRender=true; } else endStroke(); } if(gest&&gest.kind==="stamp") hideGhost(); const [a,b]=[...ptrs.values()]; gest={kind:"two",d:Math.hypot(a.x-b.x,a.y-b.y),mid:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},ang:Math.atan2(b.y-a.y,b.x-a.x)}; canvas.classList.add("grabbing"); return; }
   if(ptrs.size>2) return;
   const i=cellAt(p.x,p.y), mouse=e.pointerType==="mouse";
   if(mouse&&(e.button===1||(e.button===0&&e.shiftKey))){ gest={kind:"pan",x:p.x,y:p.y,moved:false}; canvas.classList.add("grabbing"); return; }
@@ -2115,14 +2182,20 @@ canvas.addEventListener("pointerdown",e=>{ if(!cur) return; const p=posOf(e); pt
   if(cur.cells[i]>=0){ gest={kind:"tap",x:p.x,y:p.y,cell:i,moved:false}; return; }
   selCell=-1; hideEdit();
   if(dragMode==="stamp"&&isChart()&&fitChart&&!footprint(i).length){ toast("Здесь по схеме другой цвет. Откройте замок в руке, чтобы ставить куда угодно"); gest={kind:"orbit",x:p.x,y:p.y,moved:false,cell:-1}; return; }
-  if(dragMode==="stamp"){ gest={kind:"stamp",x:p.x,y:p.y}; showGhost(footprint(i),sel,LIFT); }
-  else { hideGhost(); beginStroke(); stampAt(i); gest={kind:"paint",last:i}; updateCountsUI(); } });
+  // палец: деталь появляется через мгновение — если следом коснулся второй палец, это жест стола, и ничего не мелькает
+  if(!mouse){ gest={kind:"pend",x:p.x,y:p.y,cell:i}; const g0=gest; clearTimeout(pendT); pendT=setTimeout(()=>{ if(gest===g0&&ptrs.size===1) startPut(g0); },120); return; }
+  startPut({x:p.x,y:p.y,cell:i}); });
+let pendT=0;
+function startPut(g){ const i=g.cell; clearTimeout(pendT);
+  if(dragMode==="stamp"){ gest={kind:"stamp",x:g.x,y:g.y}; showGhost(footprint(i),sel,LIFT); }
+  else { hideGhost(); beginStroke(); stampAt(i); gest={kind:"paint",last:i,t0:performance.now()}; updateCountsUI(); } }
 canvas.addEventListener("pointermove",e=>{ const p=posOf(e);
   if(!ptrs.has(e.pointerId)){ if(eraseOn){ return; } // мышь без нажатия: отпечаток показывает, куда встанут детали
     if(e.pointerType==="mouse"&&cur&&sel&&!handOn&&!gest&&!outer){ const i=cellAt(p.x,p.y); if(i<0||cur.cells[i]>=0) hideGhost(); else showGhost(footprint(i),sel,0.02); } return; }
   const prev=ptrs.get(e.pointerId); ptrs.set(e.pointerId,p); if(!gest) return;
   if(gest.kind==="two"){ if(ptrs.size<2) return; const [a,b]=[...ptrs.values()], d=Math.hypot(a.x-b.x,a.y-b.y), mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2}, ang=Math.atan2(b.y-a.y,b.x-a.x);
     if(gest.d>0) zoomAt(d/gest.d,mid.x,mid.y); panBy(mid.x-gest.mid.x,mid.y-gest.mid.y); snapCam(); gest.d=d; gest.mid=mid; gest.ang=ang; return; }
+  if(gest.kind==="pend"){ if(Math.hypot(p.x-gest.x,p.y-gest.y)<6) return; startPut(gest); }
   const dx=p.x-prev.x, dy=p.y-prev.y;
   if(gest.kind==="orbit"||gest.kind==="pan"){ if(!gest.moved&&Math.hypot(p.x-gest.x,p.y-gest.y)<5) return; gest.moved=true; if(gest.kind==="pan"){ panBy(dx,dy); snapCam(); } else orbitBy(dx,dy); return; }
   if(gest.kind==="tap"){ if(Math.hypot(p.x-gest.x,p.y-gest.y)<7) return; // потянули с поставленной детали
@@ -2132,12 +2205,13 @@ canvas.addEventListener("pointermove",e=>{ const p=posOf(e);
   if(gest.kind==="paint"){ const i=cellAt(p.x,p.y); if(i<0||i===gest.last) return; const path=gest.last>=0?cellsLine(gest.last,i):[i]; path.forEach(stampAt); gest.last=i; updateCountsUI(); } });
 const up=e=>{ if(!ptrs.has(e.pointerId)) return; ptrs.delete(e.pointerId); canvas.classList.remove("grabbing"); if(!gest){ hideGhost(); return; }
   if(gest.kind==="two"){ if(ptrs.size<2){ gest=null; } return; }
+  if(gest.kind==="pend"){ const g=gest; startPut(g); }
   const g=gest; gest=null;
   if(g.kind==="orbit"){ if(!g.moved&&g.cell>=0){ if(cur.cells[g.cell]>=0) selectCell(g.cell); else if(!sel&&!handOn) toast("Выберите цвет в панели — и касайтесь клеток"); } return; }
   if(g.kind==="tap"){ selectCell(g.cell); return; }
   if(g.kind==="stamp"){ const cells=G.cells.slice(); if(!cells.length){ hideGhost(); return; } dropGhost(cells,sel,()=>{ commitCells(cells); }); return; }
   if(g.kind==="paint"||g.kind==="erase") endStroke(); };
-canvas.addEventListener("pointerup",up); canvas.addEventListener("pointercancel",e=>{ if(gest&&gest.kind==="stamp"){ gest=null; hideGhost(); ptrs.delete(e.pointerId); return; } up(e); });
+canvas.addEventListener("pointerup",up); canvas.addEventListener("pointercancel",e=>{ clearTimeout(pendT); if(gest&&gest.kind==="pend"){ gest=null; ptrs.delete(e.pointerId); return; } if(gest&&gest.kind==="stamp"){ gest=null; hideGhost(); ptrs.delete(e.pointerId); return; } up(e); });
 canvas.addEventListener("pointerleave",e=>{ if(e.pointerType==="mouse"&&!gest&&!outer) hideGhost(); });
 canvas.addEventListener("wheel",e=>{ if(!cur) return; e.preventDefault(); const p=posOf(e);
   if(e.ctrlKey||e.metaKey||(!e.shiftKey&&Math.abs(e.deltaX)<1&&e.deltaMode===0)) zoomAt(Math.exp(-e.deltaY*(e.ctrlKey?0.01:0.0016)),p.x,p.y); else panBy(-e.deltaX,-e.deltaY); },{passive:false});
@@ -2208,7 +2282,7 @@ $("tUndo").addEventListener("click",undo); $("tRedo").addEventListener("click",r
 $("tHint").addEventListener("click",()=>{ hintOn=!hintOn; $("tHint").classList.toggle("on",hintOn); $("tHint").setAttribute("aria-pressed",String(hintOn)); U.uSel.value=hintOn&&sel?cur.pal.indexOf(sel):-1; needRender=true; if(hintOn&&!sel) toast("Выберите цвет — подсвечу, куда его ставить"); });
 $("tPic").addEventListener("click",()=>{ picOn=!picOn; $("tPic").classList.toggle("on",picOn); $("tPic").setAttribute("aria-pressed",String(picOn)); U.uPic.value=picOn?1:0; needRender=true; });
 $("tColor").addEventListener("click",()=>openPalette({title:"Цвет в руке",items:palItems(),cur:sel,onPick:selectColor}));
-$("tLight").addEventListener("click",()=>{ lightMode=(lightMode+1)%LIGHTS.length; ls.set("mystitch.light",String(lightMode)); placeLights(); toast("Свет: "+LIGHTS[lightMode].n); });
+$("tLight").addEventListener("click",()=>openPalette({title:"Свет над мозаикой",items:LIGHTS.map((l,i)=>({id:String(i),hex:LIGHT_SW[i],name:l.n})),cur:String(lightMode),onPick:id=>{ lightMode=+id; ls.set("mystitch.light",id); placeLights(); toast("Свет: "+LIGHTS[lightMode].n); }}));
 $("tGlow").addEventListener("click",()=>openPalette({title:"Цвет фона",items:TABLES.map(t=>({id:t.id,hex:tableCss(t),name:t.n})),cur:tableOf(ls.get("mystitch.table")).id,onPick:id=>{ ls.set("mystitch.table",id); applyTable(); if(!$("setPop").hidden) setPopSync(); toast("Фон: "+tableOf(id).n); }}));
 function glowDot(){ return bgDot(); const L=glowOf(cur.glow), d=$("tGlowDot"); d.classList.toggle("off",!L.hex); d.style.background=L.hex||""; d.style.boxShadow=L.hex?"0 0 0 2px rgba(255,255,255,.12),0 0 12px 2px "+L.hex:""; $("tGlow").title="Подсветка под основой: "+L.n; }
 function palItems(){ const first=cur?cur.pal.filter((c,i)=>!isChart()||counts.target[i]>0):[]; const rest=DMC.map(([c])=>c).filter(c=>!first.includes(c)); return first.concat(rest).map(c=>({id:c,hex:hexOf(c),name:nameOf(c)})); }
@@ -2242,7 +2316,7 @@ function openPalette({title,items,cur:current,onPick}){ const pal=$("palette"); 
   items.forEach(it=>{ const b=document.createElement("button"); b.className="swatch-btn"+(it.id===current?" on":""); b.style.background=it.hex||"linear-gradient(135deg,#3a3a42,#1c1c21)"; b.title=it.name; b.setAttribute("aria-label",it.name);
     b.addEventListener("click",()=>{ onPick(it.id); hidePalette(); }); b.addEventListener("pointerenter",()=>nameEl.textContent=it.name); b.addEventListener("focus",()=>nameEl.textContent=it.name); grid.appendChild(b); });
   pal.hidden=false; }
-document.addEventListener("pointerdown",e=>{ const p=$("palette"); if(!p.hidden&&!p.contains(e.target)&&!e.target.closest("#tColor,#tGlow,#eColor")) hidePalette(); },true);
+document.addEventListener("pointerdown",e=>{ const p=$("palette"); if(!p.hidden&&!p.contains(e.target)&&!e.target.closest("#tColor,#tGlow,#eColor,#tLight")) hidePalette(); },true);
 
 /* ---------- Настройки полотна: что вышиваем, стразы, основа, размер в сантиметрах, звук ---------- */
 function segSync(id,v){ document.querySelectorAll("#"+id+" button").forEach(b=>b.classList.toggle("on",b.dataset.v===v)); }
@@ -2593,7 +2667,7 @@ window.addEventListener("unhandledrejection",e=>{ if(!bootDone) bootFail(e.reaso
 async function boot(){ try{ await IDB.open(); }catch(_){} await Store.load(); route(); bootDone=true; loaderHide(); requestAnimationFrame(frame);
   try{ if(navigator.storage&&navigator.storage.persisted&&!(await navigator.storage.persisted())) navigator.storage.persist().catch(()=>{}); }catch(_){} }
 window.__dbg=()=>({cam:{t:cam.t.toArray(),r:cam.r,phi:cam.phi,theta:cam.theta},g:{t:cam.g.t.toArray(),r:cam.g.r},W,H,Wp:W_px,Hp:H_px});
-window.__ms={state:()=>cur&&{w:W,h:H,pal:cur.pal.length,placed:counts.placedAll,ok:counts.okAll,total:counts.total,sel,step:cur.step,blocks:blocks.length,tool:tool.id},cellXY:i=>{ const r=canvas.getBoundingClientRect(), p=cellScreen(i); return [r.left+p[0],r.top+p[1]]; },firstOf:code=>{ const si=cur.pal.indexOf(code); return cur.grid.findIndex((t,i)=>t===si&&cur.cells[i]<0); },fillAll:()=>{ beginStroke(); for(let i=0;i<cur.grid.length;i++) if(cur.grid[i]>=0) setCell(i,cur.grid[i]); endStroke(); },fillBlock:()=>{ const b=curBlock(); beginStroke(); for(let r=b.y0;r<b.y1;r++) for(let c=b.x0;c<b.x1;c++){ const i=r*W+c; if(cur.grid[i]>=0) setCell(i,cur.grid[i]); } endStroke(); },cam:(th,ph,r,x,z)=>{ camGo(new THREE.Vector3(x||0,0,z||0),r,ph,th,true); },tool:id=>setTool(TOOLS.find(t=>t.id===id)),mode:m=>{ dragMode=m; handSync(); },vis:()=>visList&&visList.map(v=>v.code),info:()=>({calls:renderer.info.render.calls,tris:renderer.info.render.triangles})};
+window.__ms={state:()=>cur&&{w:W,h:H,pal:cur.pal.length,placed:counts.placedAll,ok:counts.okAll,total:counts.total,sel,step:cur.step,blocks:blocks.length,tool:tool.id},cellXY:i=>{ const r=canvas.getBoundingClientRect(), p=cellScreen(i); return [r.left+p[0],r.top+p[1]]; },firstOf:code=>{ const si=cur.pal.indexOf(code); return cur.grid.findIndex((t,i)=>t===si&&cur.cells[i]<0); },fillAll:()=>{ beginStroke(); for(let i=0;i<cur.grid.length;i++) if(cur.grid[i]>=0) setCell(i,cur.grid[i]); endStroke(); },fillBlock:()=>{ const b=curBlock(); beginStroke(); for(let r=b.y0;r<b.y1;r++) for(let c=b.x0;c<b.x1;c++){ const i=r*W+c; if(cur.grid[i]>=0) setCell(i,cur.grid[i]); } endStroke(); },cam:(th,ph,r,x,z)=>{ camGo(new THREE.Vector3(x||0,0,z||0),r,ph,th,true); },tool:id=>setTool(TOOLS.find(t=>t.id===id)),mode:m=>{ dragMode=m; handSync(); },vis:()=>visList&&visList.map(v=>v.code),ghost:()=>!!(ghost&&ghost.visible),okCell:i=>cur.cells[i]<0&&cur.grid[i]===cur.pal.indexOf(sel),info:()=>({calls:renderer.info.render.calls,tris:renderer.info.render.triangles})};
 boot();
 })();
 </script>
