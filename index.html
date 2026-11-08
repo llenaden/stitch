@@ -1162,6 +1162,26 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 /* список цветов прокручивается пальцем с любого места строки, в том числе с плашки */
 #list .thumb,#list .thumb.sym{touch-action:pan-y}
 #list{overscroll-behavior:contain;-webkit-overflow-scrolling:touch}
+
+/* ---------- Страница схемы: превью в 3D и мягкие переходы ---------- */
+#mdViewer #view{position:absolute;inset:0;width:100%;height:100%;display:block;z-index:1;touch-action:none;cursor:grab;transition:opacity .22s ease}
+#mdViewer #view:active{cursor:grabbing}
+#mdViewer.pv #mdCanvas{opacity:0}
+#mdViewer #mdCanvas{transition:opacity .22s ease}
+#mdViewer.vfade #mdCanvas,#mdViewer.vfade #view{opacity:0}
+#scrModel.md-busy #mdViewer #view{opacity:.55}
+#mdViewer .vtoggle{z-index:3;position:absolute}
+#mdToggle{isolation:isolate}
+#mdToggle .vt-pill{position:absolute;left:0;top:0;bottom:0;width:0;background:var(--ink);border-radius:9px;transition:transform .28s cubic-bezier(.3,.7,.2,1),width .28s cubic-bezier(.3,.7,.2,1);z-index:-1;pointer-events:none}
+#mdToggle button{position:relative;transition:color .25s ease}
+#mdToggle button.on{background:transparent}
+.pv-hint{position:absolute;left:14px;top:14px;z-index:3;font-size:12px;color:var(--ink);background:rgba(14,14,17,.66);backdrop-filter:blur(8px);-webkit-backdrop-filter:blur(8px);padding:7px 11px;border-radius:9px;opacity:0;transform:translateY(-4px);transition:opacity .3s ease,transform .3s ease;pointer-events:none;max-width:calc(100% - 28px)}
+.pv-hint.on{opacity:1;transform:none}
+#mdShapeRow.mdin,#mdStitchRow.mdin{animation:mdIn .32s cubic-bezier(.3,.7,.2,1)}
+@keyframes mdIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.scr .opt-seg button{transition:background-color .22s ease,color .22s ease,border-color .22s ease}
+.scr .d-info .stats .v{white-space:nowrap}
+.scr .d-info .stats .l{line-height:1.3}
 </style>
 </head>
 <body>
@@ -1255,7 +1275,8 @@ body.dragging,body.dragging *{cursor:grabbing!important}
         <div class="md-user"><button class="pill" id="mdDelete"><svg class="ic"><use href="#i-trash"/></svg><span>Удалить схему</span></button></div>
       </div>
       <div class="viewer" id="mdViewer"><canvas id="mdCanvas" aria-label="Предпросмотр схемы"></canvas>
-        <div class="vtoggle" id="mdToggle"><button data-v="chart" class="on">Схема</button><button data-v="pic">Картинка</button><button data-v="src">Оригинал</button></div>
+        <div class="vtoggle" id="mdToggle"><i class="vt-pill" aria-hidden="true"></i><button data-v="prev" class="on">Превью</button><button data-v="chart">Схема</button><button data-v="src">Оригинал</button></div>
+        <div class="pv-hint" id="pvHint">Одним пальцем — повернуть, двумя — приблизить и подвинуть</div>
       </div>
     </div>
     <section class="sess" id="mdSess"><div class="sess-h"><span class="eyebrow">Мои работы по этой схеме</span><span class="grow"></span></div><div id="mdSessList"></div></section>
@@ -1765,7 +1786,22 @@ const shapeOf=w=>w.type==="cross"?(w.stitch||"cross"):(w.shape||"square");
 const canvas=$("view");
 const renderer=new THREE.WebGLRenderer({canvas,antialias:true,alpha:true,powerPreference:"high-performance",preserveDrawingBuffer:false});
 renderer.toneMapping=THREE.ACESFilmicToneMapping; renderer.toneMappingExposure=0.82;
-renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFSoftShadowMap; renderer.shadowMap.autoUpdate=false;
+renderer.shadowMap.enabled=true; renderer.shadowMap.type=THREE.PCFShadowMap; renderer.shadowMap.autoUpdate=false;
+// мягкие тени: 16 выборок по диску со случайным поворотом (без ступенек) и тень светлее — как от рассеянной лампы
+(()=>{ const C=THREE.ShaderChunk;
+  C.shadowmap_pars_fragment+=`
+#if defined( USE_SHADOWMAP ) && NUM_DIR_LIGHT_SHADOWS > 0
+const vec2 MS_PD[16]=vec2[16](vec2(-0.94201624,-0.39906216),vec2(0.94558609,-0.76890725),vec2(-0.09418410,-0.92938870),vec2(0.34495938,0.29387760),vec2(-0.91588581,0.45771432),vec2(-0.81544232,-0.87912464),vec2(-0.38277543,0.27676845),vec2(0.97484398,0.75648379),vec2(0.44323325,-0.97511554),vec2(0.53742981,-0.47373420),vec2(-0.26496911,-0.41893023),vec2(0.79197514,0.19090188),vec2(-0.24188840,0.99706507),vec2(-0.81409955,0.91437590),vec2(0.19984126,0.78641367),vec2(0.14383161,-0.14100790));
+float msSoftShadow( sampler2D shadowMap, vec2 shadowMapSize, float shadowBias, float shadowRadius, vec4 shadowCoord ){
+  shadowCoord.xyz/=shadowCoord.w; shadowCoord.z+=shadowBias;
+  if(shadowCoord.x<0.0||shadowCoord.x>1.0||shadowCoord.y<0.0||shadowCoord.y>1.0||shadowCoord.z>1.0) return 1.0;
+  float a=fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453)*6.2831853; float c=cos(a), s=sin(a); mat2 R=mat2(c,-s,s,c);
+  vec2 ts=shadowRadius/shadowMapSize; float sh=0.0;
+  for(int k=0;k<16;k++) sh+=texture2DCompare(shadowMap,shadowCoord.xy+R*MS_PD[k]*ts,shadowCoord.z);
+  sh/=16.0; return 1.0-0.62*(1.0-sh); }
+#endif
+`;
+  C.lights_fragment_begin=C.lights_fragment_begin.replace("? getShadow( directionalShadowMap[ i ]","? msSoftShadow( directionalShadowMap[ i ]"); })();
 renderer.setClearColor(0x000000,0);
 let dpr=Math.min(window.devicePixelRatio||1,2); renderer.setPixelRatio(dpr);
 const scene=new THREE.Scene();
@@ -2060,7 +2096,7 @@ function setupBoard(){ // размеры и текстуры под текущу
   if(!palTex){ palTex=new THREE.DataTexture(new Uint8Array(256*4),256,1,THREE.RGBAFormat); palTex.colorSpace=THREE.SRGBColorSpace; palTex.magFilter=palTex.minFilter=THREE.NearestFilter; U.tPal.value=palTex; }
   syncPal(); for(let i=0;i<W*H;i++) texCell(i); cellTex.needsUpdate=true;
   // тень от лампы — на весь лист
-  const sc=key.shadow.camera, e=S*0.62+margin; sc.left=-e; sc.right=e; sc.top=e; sc.bottom=-e; sc.near=0.5; sc.far=S*6+200; sc.updateProjectionMatrix();
+  const sc=key.shadow.camera, e=S*0.62+margin; key.shadow.radius=clamp(4096/(2*e)*0.38,1.5,24); sc.left=-e; sc.right=e; sc.top=e; sc.bottom=-e; sc.near=0.5; sc.far=S*6+200; sc.updateProjectionMatrix();
   applyFabric(); applyGlow(); applyTable(); placeLights(); buildAllChunks(); shadowDirty=true; needRender=true; }
 function syncPal(){ const d=palTex.image.data; for(let i=0;i<256;i++){ const code=cur.pal[i]; const rgb=code?colorOf(code).rgb:[0,0,0]; d[i*4]=rgb[0]; d[i*4+1]=rgb[1]; d[i*4+2]=rgb[2]; d[i*4+3]=255; } palTex.needsUpdate=true; palLin=cur.pal.map(c=>new THREE.Color(hexOf(c))); }
 let palLin=[];
@@ -2151,9 +2187,10 @@ function cellScreen(i){ const c=i%W, r=(i-c)/W; const v=new THREE.Vector3(c-W/2+
 
 /* цикл: рисуем только когда что-то изменилось */
 let visT=0, W_px=1,H_px=1, needRender=true, shadowDirty=true, lastShadow=0;
-function resize(){ if(ws.hidden) return; const r=ws.getBoundingClientRect(); W_px=Math.max(1,Math.round(r.width)); H_px=Math.max(1,Math.round(r.height)); dpr=Math.min(window.devicePixelRatio||1,2); renderer.setPixelRatio(dpr); renderer.setSize(W_px,H_px,false); camera.aspect=W_px/H_px; camera.updateProjectionMatrix(); needRender=true; insDirty=true; insApplyPos(); }
-new ResizeObserver(resize).observe(ws);
-function frame(now){ requestAnimationFrame(frame); if(ws.hidden||!cur) return;
+let previewOn=false; // 3D-превью готовой работы на странице схемы — тот же стол и те же детали, только смотреть
+function resize(){ if(ws.hidden&&!previewOn) return; const r=(previewOn?$("mdViewer"):ws).getBoundingClientRect(); W_px=Math.max(1,Math.round(r.width)); H_px=Math.max(1,Math.round(r.height)); dpr=Math.min(window.devicePixelRatio||1,2); renderer.setPixelRatio(dpr); renderer.setSize(W_px,H_px,false); camera.aspect=W_px/H_px; camera.updateProjectionMatrix(); needRender=true; insDirty=true; insApplyPos(); }
+new ResizeObserver(resize).observe(ws); new ResizeObserver(()=>{ if(previewOn) resize(); }).observe($("mdViewer"));
+function frame(now){ requestAnimationFrame(frame); if((ws.hidden&&!previewOn)||!cur) return;
   // холст всегда во всё окно: если размер окна поменялся незаметно для наблюдателя — подгоняем
   if(canvas.clientWidth&&(Math.abs(canvas.clientWidth-W_px)>1||Math.abs(canvas.clientHeight-H_px)>1)) resize();
   const mv=updateCamera(); if(dirtyChunks.size){ flushChunks(); needRender=true; } if(cellTexDirty){ cellTex.needsUpdate=true; cellTexDirty=false; needRender=true; }
@@ -2162,7 +2199,7 @@ function frame(now){ requestAnimationFrame(frame); if(ws.hidden||!cur) return;
     if(selCell>=0){ const c=selCell%W, r=(selCell-c)/W; selRing.position.set(c-W/2+0.5,0.03,r-H/2+0.5); selRing.visible=true; } else selRing.visible=false;
     if(shadowDirty&&now-lastShadow>110){ renderer.shadowMap.needsUpdate=true; shadowDirty=false; lastShadow=now; }
     renderer.render(scene,camera); needRender=shadowDirty; if(mv){ insDirty=true; visT=now; } }
-  if(visT&&now-visT>260){ visT=0; visSync(); }
+  if(visT&&now-visT>260){ visT=0; if(!previewOn) visSync(); }
   else if(shadowDirty) needRender=true;
   if(insDirty&&!$("insBook").hidden){ insDirty=false; drawIns(); } }
 
@@ -2219,15 +2256,19 @@ document.addEventListener("selectstart",e=>{ if(!ws.hidden&&!(e.target.closest&&
 ws.addEventListener("contextmenu",e=>{ if(!e.target.closest("input,textarea")) e.preventDefault(); });
 canvas.addEventListener("touchstart",e=>{ if(e.cancelable) e.preventDefault(); },{passive:false});
 function cellsLine(a,b){ const ac=a%W, ar=(a-ac)/W, bc=b%W, br=(b-bc)/W, n=Math.max(Math.abs(bc-ac),Math.abs(br-ar)), o=[]; for(let k=1;k<=n;k++){ o.push(Math.round(ar+(br-ar)*k/n)*W+Math.round(ac+(bc-ac)*k/n)); } return o; }
-canvas.addEventListener("pointerdown",e=>{ if(!cur) return; const p=posOf(e); ptrs.set(e.pointerId,p); try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
+// сброс «зависших» касаний: если система съела отпускание пальца (жест iPad, всплывшее окно, ладонь),
+// старый палец оставался в памяти — и каждое новое касание считалось двумя пальцами: ставить было нельзя
+function resetPointers(){ ptrs.clear(); clearTimeout(pendT); if(gest&&(gest.kind==="paint"||gest.kind==="erase")) endStroke(); if(gest) hideGhost(); gest=null; canvas.classList.remove("grabbing"); }
+canvas.addEventListener("pointerdown",e=>{ if(!cur) return; const p=posOf(e); if(e.isPrimary&&ptrs.size) resetPointers(); for(const id of [...ptrs.keys()]) if(id===e.pointerId) ptrs.delete(id);
+  ptrs.set(e.pointerId,p); try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
   hideSetPop(); hidePalette();
   if(ptrs.size===2){ clearTimeout(pendT); if(gest&&gest.kind==="paint"){ if(performance.now()-(gest.t0||0)<350&&stroke&&stroke.length<=25){ applyOps(stroke,true); stroke=null; flushChunks(); updateCountsUI(); needRender=true; } else endStroke(); } if(gest&&gest.kind==="stamp") hideGhost(); const [a,b]=[...ptrs.values()]; gest={kind:"two",d:Math.hypot(a.x-b.x,a.y-b.y),mid:{x:(a.x+b.x)/2,y:(a.y+b.y)/2},ang:Math.atan2(b.y-a.y,b.x-a.x)}; canvas.classList.add("grabbing"); return; }
   if(ptrs.size>2) return;
   const i=cellAt(p.x,p.y), mouse=e.pointerType==="mouse";
   if(mouse&&(e.button===1||(e.button===0&&e.shiftKey))){ gest={kind:"pan",x:p.x,y:p.y,moved:false}; canvas.classList.add("grabbing"); return; }
   if(mouse&&e.button===2){ gest={kind:"orbit",x:p.x,y:p.y,moved:false,cell:-1}; canvas.classList.add("grabbing"); return; }
-  if(eraseOn&&!handOn&&i>=0){ selCell=-1; hideEdit(); beginStroke(); eraseAt(i); gest={kind:"erase",last:i}; return; }
-  if(handOn||!sel||i<0){ gest={kind:"orbit",x:p.x,y:p.y,moved:false,cell:i}; canvas.classList.add("grabbing"); return; }
+  if(eraseOn&&!handOn&&!previewOn&&i>=0){ selCell=-1; hideEdit(); beginStroke(); eraseAt(i); gest={kind:"erase",last:i}; return; }
+  if(handOn||previewOn||!sel||i<0){ gest={kind:"orbit",x:p.x,y:p.y,moved:false,cell:i}; canvas.classList.add("grabbing"); return; }
   if(cur.cells[i]>=0){ gest={kind:"tap",x:p.x,y:p.y,cell:i,moved:false}; return; }
   selCell=-1; hideEdit();
   if(dragMode==="stamp"&&isChart()&&fitChart&&!footprint(i).length){ toast("Здесь по схеме другой цвет. Откройте замок в руке, чтобы ставить куда угодно"); gest={kind:"orbit",x:p.x,y:p.y,moved:false,cell:-1}; return; }
@@ -2240,7 +2281,7 @@ function startPut(g){ const i=g.cell; clearTimeout(pendT);
   else { hideGhost(); beginStroke(); stampAt(i); gest={kind:"paint",last:i,t0:performance.now()}; updateCountsUI(); } }
 canvas.addEventListener("pointermove",e=>{ const p=posOf(e);
   if(!ptrs.has(e.pointerId)){ if(eraseOn){ return; } // мышь без нажатия: отпечаток показывает, куда встанут детали
-    if(e.pointerType==="mouse"&&cur&&sel&&!handOn&&!gest&&!outer){ const i=cellAt(p.x,p.y); if(i<0||cur.cells[i]>=0) hideGhost(); else showGhost(footprint(i),sel,0.02); } return; }
+    if(e.pointerType==="mouse"&&cur&&sel&&!handOn&&!previewOn&&!gest&&!outer){ const i=cellAt(p.x,p.y); if(i<0||cur.cells[i]>=0) hideGhost(); else showGhost(footprint(i),sel,0.02); } return; }
   const prev=ptrs.get(e.pointerId); ptrs.set(e.pointerId,p); if(!gest) return;
   if(gest.kind==="two"){ if(ptrs.size<2) return; const [a,b]=[...ptrs.values()], d=Math.hypot(a.x-b.x,a.y-b.y), mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2}, ang=Math.atan2(b.y-a.y,b.x-a.x);
     if(gest.d>0) zoomAt(d/gest.d,mid.x,mid.y); panBy(mid.x-gest.mid.x,mid.y-gest.mid.y); snapCam(); gest.d=d; gest.mid=mid; gest.ang=ang; return; }
@@ -2256,11 +2297,17 @@ const up=e=>{ if(!ptrs.has(e.pointerId)) return; ptrs.delete(e.pointerId); canva
   if(gest.kind==="two"){ if(ptrs.size<2){ gest=null; } return; }
   if(gest.kind==="pend"){ const g=gest; clearTimeout(pendT); if(dragMode==="stamp"){ gest=null; hideGhost(); commitCells(footprint(g.cell)); return; } startPut(g); }
   const g=gest; gest=null;
-  if(g.kind==="orbit"){ if(!g.moved&&g.cell>=0){ if(cur.cells[g.cell]>=0) selectCell(g.cell); else if(!sel&&!handOn) toast("Выберите цвет в панели — и касайтесь клеток"); } return; }
+  if(g.kind==="orbit"){ if(!g.moved&&g.cell>=0&&!previewOn){ if(cur.cells[g.cell]>=0) selectCell(g.cell); else if(!sel&&!handOn) toast("Выберите цвет в панели — и касайтесь клеток"); } return; }
   if(g.kind==="tap"){ selectCell(g.cell); return; }
   if(g.kind==="stamp"){ const cells=G.cells.slice(); hideGhost(); if(cells.length) commitCells(cells); return; }
+  if(g.kind==="paint"&&isChart()&&fitChart&&(!stroke||!stroke.length)&&Date.now()-lockTold>4000){ lockTold=Date.now(); toast("Здесь по схеме другой цвет. Откройте замок в руке, чтобы ставить куда угодно"); }
   if(g.kind==="paint"||g.kind==="erase") endStroke(); };
-canvas.addEventListener("pointerup",up); canvas.addEventListener("pointercancel",e=>{ clearTimeout(pendT); if(gest&&gest.kind==="pend"){ gest=null; ptrs.delete(e.pointerId); return; } if(gest&&gest.kind==="stamp"){ gest=null; hideGhost(); ptrs.delete(e.pointerId); return; } up(e); });
+let lockTold=0;
+canvas.addEventListener("pointerup",up);
+// отпускание, ушедшее мимо холста, и потерянный захват — тоже конец касания
+document.addEventListener("pointerup",e=>{ if(ptrs.has(e.pointerId)&&e.target!==canvas) up(e); },true);
+canvas.addEventListener("lostpointercapture",e=>{ if(ptrs.has(e.pointerId)) setTimeout(()=>{ if(ptrs.has(e.pointerId)) up(e); },0); });
+window.addEventListener("blur",()=>{ if(ptrs.size) resetPointers(); }); document.addEventListener("visibilitychange",()=>{ if(document.hidden&&ptrs.size) resetPointers(); }); canvas.addEventListener("pointercancel",e=>{ clearTimeout(pendT); if(gest&&gest.kind==="pend"){ gest=null; ptrs.delete(e.pointerId); return; } if(gest&&gest.kind==="stamp"){ gest=null; hideGhost(); ptrs.delete(e.pointerId); return; } up(e); });
 canvas.addEventListener("pointerleave",e=>{ if(e.pointerType==="mouse"&&!gest&&!outer) hideGhost(); });
 canvas.addEventListener("wheel",e=>{ if(!cur) return; e.preventDefault(); const p=posOf(e);
   if(e.ctrlKey||e.metaKey||(!e.shiftKey&&Math.abs(e.deltaX)<1&&e.deltaMode===0)) zoomAt(Math.exp(-e.deltaY*(e.ctrlKey?0.01:0.0016)),p.x,p.y); else panBy(-e.deltaX,-e.deltaY); },{passive:false});
@@ -2527,7 +2574,8 @@ function workCard(w,onClick){ const c=document.createElement("button"); c.classN
 
 /* главная: «Готовые схемы» (картинки, переведённые в схемы) и «Самостоятельная вышивка» (чистое полотно) */
 let homeTab=ls.get("mystitch.tab")==="own"?"own":"models";
-function enterHome(){ leaveWork(); mode="home"; show("scrHome");
+function enterHome(){ hidePreview(); return enterHome_(); }
+function enterHome_(){ leaveWork(); mode="home"; show("scrHome");
   [["hsModels","models","paneModels"],["hsOwn","own","paneOwn"]].forEach(([b,t,p])=>{ $(b).setAttribute("aria-selected",String(homeTab===t)); $(p).hidden=homeTab!==t; });
   if(homeTab==="models") renderBento(); else renderOwn(); }
 $("hsModels").addEventListener("click",()=>{ homeTab="models"; ls.set("mystitch.tab",homeTab); enterHome(); });
@@ -2556,11 +2604,11 @@ $("imgFile").addEventListener("change",async e=>{ const f=e.target.files&&e.targ
   catch(_){ loaderHide(); toast("Не получилось открыть эту картинку. Попробуйте jpg или png"); } });
 
 /* ---------- Страница схемы: что вышиваем и какой размер — до того, как открыть инструкцию ---------- */
-let MC=null, mdView="chart", mdChart=null, mdBusy=0;
-function enterChart(id){ const C=CHARTS.get(id); if(!C){ location.hash=""; setTimeout(()=>toast("Такой схемы нет на этом устройстве"),50); return; }
+let MC=null, mdView="prev", mdChart=null, mdBusy=0;
+function enterChart(id){ hidePreview(); const C=CHARTS.get(id); if(!C){ location.hash=""; setTimeout(()=>toast("Такой схемы нет на этом устройстве"),50); return; }
   leaveWork(); mode="chart"; MC=C; show("scrModel"); $("mdName").textContent=C.name; mdDelArmed=false; $("mdDelete").lastChild.textContent="Удалить схему"; mdSync(); mdRecalc(); }
 const segBuild=(box,vals,cur_,fmt,onPick)=>{ box.innerHTML=""; vals.forEach(v=>{ const b=document.createElement("button"); b.dataset.v=String(v); b.textContent=fmt(v); b.classList.toggle("on",v===cur_); b.addEventListener("click",()=>onPick(v)); box.appendChild(b); }); };
-function mdSync(){ const C=MC; segSync("mdType",C.type); segSync("mdShape",C.shape); segSync("mdStitch",C.stitch||"cross"); $("mdShapeRow").hidden=C.type!=="diamond"; $("mdStitchRow").hidden=C.type!=="cross";
+function mdSync(){ const C=MC; segSync("mdType",C.type); segSync("mdShape",C.shape); segSync("mdStitch",C.stitch||"cross"); $("mdShapeRow").hidden=C.type!=="diamond"; $("mdStitchRow").hidden=C.type!=="cross"; if(mdSync.t&&mdSync.t!==C.type){ const r=$(C.type==="diamond"?"mdShapeRow":"mdStitchRow"); r.classList.remove("mdin"); void r.offsetWidth; r.classList.add("mdin"); } mdSync.t=C.type;
   if(!C.cm) C.cm=40; C.cm=clamp(C.cm,10,TYPES[C.type].maxCm); const r=$("mdCm"); r.max=TYPES[C.type].maxCm; r.value=C.cm; $("mdCol").value=C.colors;
   { const sc=document.querySelector("#scrModel .rng-scale span:last-child"); if(sc) sc.textContent=TYPES[C.type].maxCm+" см · детальнее"; }
   const ww=cellsFor(C.cm,C.type), hh=chartH(C,ww); $("mdCmOut").textContent=cmOf(ww,C.type)+" × "+cmOf(hh,C.type)+" см"; $("mdSizeNote").textContent=ww+"×"+hh+" "+(C.type==="diamond"?"страз":"крестиков")+" в ряду и столбце"; $("mdColOut").textContent=String(C.colors);
@@ -2577,16 +2625,31 @@ let mdT=0; $("mdCm").addEventListener("input",e=>{ MC.cm=+e.target.value; mdSync
 $("mdCol").addEventListener("input",e=>{ MC.colors=+e.target.value; mdSync(); clearTimeout(mdT); mdT=setTimeout(()=>{ Store.putChart(MC); mdRecalc(); },220); });
 document.querySelectorAll("#mdShape button").forEach(b=>b.addEventListener("click",()=>{ MC.shape=b.dataset.v; Store.putChart(MC); mdSync(); mdDraw(); }));
 document.querySelectorAll("#mdStitch button").forEach(b=>b.addEventListener("click",()=>{ MC.stitch=b.dataset.v; Store.putChart(MC); mdSync(); mdDraw(); }));
-document.querySelectorAll("#mdToggle button").forEach(b=>b.addEventListener("click",()=>{ mdView=b.dataset.v; document.querySelectorAll("#mdToggle button").forEach(x=>x.classList.toggle("on",x===b)); mdDraw(); }));
+function vtSync(){ const box=$("mdToggle"), on=box.querySelector("button.on"), pill=box.querySelector(".vt-pill"); if(!on||!pill) return; pill.style.width=on.offsetWidth+"px"; pill.style.transform="translateX("+on.offsetLeft+"px)"; }
+document.querySelectorAll("#mdToggle button").forEach(b=>b.addEventListener("click",()=>{ if(mdView===b.dataset.v) return; mdView=b.dataset.v; document.querySelectorAll("#mdToggle button").forEach(x=>x.classList.toggle("on",x===b)); vtSync();
+  // мягкая смена вида: старое гаснет, новое проявляется
+  const host=$("mdViewer"); host.classList.add("vfade"); setTimeout(()=>{ mdDraw(); requestAnimationFrame(()=>host.classList.remove("vfade")); },140); }));
+/* ---------- Превью: готовая работа в 3D — стразы нужной формы или крестики, её можно крутить и приближать ---------- */
+const viewHome=canvas.parentNode, viewNext=canvas.nextSibling; let prevKey="", prevLook="", pvHintT=0;
+function previewWork(){ const C=MC, ch=mdChart; return normWork({id:"__preview",preview:true,type:C.type,shape:C.shape,stitch:C.stitch||"cross",fabric:C.type==="cross"?"ecru":"white",glow:"warm",w:ch.w,h:ch.h,pal:ch.pal.slice(),grid:Int16Array.from(ch.grid),cells:Int16Array.from(ch.grid),opts:{}}); }
+function showPreview(){ if(mode!=="chart"||mdView!=="prev"||!mdChart){ hidePreview(); return; } const C=MC, host=$("mdViewer");
+  const key=[C.id,C.type,mdChart.w,mdChart.h,mdChart.pal.join(",")].join("|"), look=C.shape+"|"+(C.stitch||"cross");
+  if(!previewOn){ host.insertBefore(canvas,host.firstChild); previewOn=true; host.classList.add("pv"); resetPointers(); setErase(false); handOn=false; canvas.classList.remove("handmode"); resize();
+    $("pvHint").classList.add("on"); clearTimeout(pvHintT); pvHintT=setTimeout(()=>$("pvHint").classList.remove("on"),3500); }
+  if(cur&&cur.preview&&key===prevKey&&look===prevLook){ needRender=true; return; }
+  const fresh=!(cur&&cur.preview&&key===prevKey); prevKey=key; prevLook=look;
+  disposeChunks(); cur=previewWork(); setupBoard(); resize(); if(fresh){ fitAll(true); orbitBy(-36,-22); zoomAt(0.8,W_px/2,H_px/2); snapCam(); } needRender=true; }
+function hidePreview(){ if(!previewOn) return; previewOn=false; $("mdViewer").classList.remove("pv"); viewHome.insertBefore(canvas,viewNext); $("pvHint").classList.remove("on"); resetPointers(); if(cur&&cur.preview){ disposeChunks(); cur=null; } prevKey=""; prevLook=""; }
 async function mdRecalc(){ const C=MC, tk=++mdBusy, host=$("scrModel");
   // пока считается новая схема, старая остаётся на месте (чуть приглушённой) — страница не прыгает и не замирает
   if(!mdChart||mdChart.src!==C.id){ mdChart=null; mdDraw(); $("mdStats").innerHTML=""; $("mdParts").innerHTML='<p class="empty-note">Подбираю цвета…</p>'; } host.classList.add("md-busy");
   await nextFrame(); if(tk!==mdBusy||MC!==C) return;
   let ch=null; try{ ch=await chartFor(C,cellsFor(C.cm,C.type),C.colors); }catch(_){ host.classList.remove("md-busy"); $("mdParts").innerHTML='<p class="empty-note">Не получилось прочитать картинку</p>'; return; } if(tk!==mdBusy||MC!==C) return; host.classList.remove("md-busy"); ch.src=C.id; mdChart=ch; mdDraw();
   const cnt=new Array(ch.pal.length).fill(0); ch.grid.forEach(t=>{ if(t>=0) cnt[t]++; }); const n=cnt.reduce((a,b)=>a+b,0);
-  $("mdStats").innerHTML=""; [[cmOf(ch.w,C.type)+"×"+cmOf(ch.h,C.type),"см"],[ch.pal.length,plural(ch.pal.length,"цвет","цвета","цветов")],[n.toLocaleString("ru-RU"),plural(n,...TYPES[C.type].units)],[timeLabel(n,C.type),"примерно"]].forEach(([v,l])=>{ const s=document.createElement("div"); s.className="stat"; s.innerHTML='<div class="v"></div><div class="l"></div>'; s.querySelector(".v").textContent=v; s.querySelector(".l").textContent=l; $("mdStats").appendChild(s); });
+  $("mdStats").innerHTML=""; [[cmOf(ch.w,C.type)+"×"+cmOf(ch.h,C.type),"см"],[ch.pal.length,plural(ch.pal.length,"цвет","цвета","цветов")],[n.toLocaleString("ru-RU"),plural(n,...TYPES[C.type].units)],...(()=>{ const t=timeLabel(n,C.type), m=t.match(/^(.*?)\s*\((.*)\)$/); return [m?[m[1],m[2]]:[t,"примерно"]]; })()].forEach(([v,l])=>{ const s=document.createElement("div"); s.className="stat"; s.innerHTML='<div class="v"></div><div class="l"></div>'; s.querySelector(".v").textContent=v; s.querySelector(".l").textContent=l; $("mdStats").appendChild(s); });
   const box=$("mdParts"); box.innerHTML=""; ch.pal.forEach((code,i)=>{ const r=document.createElement("div"); r.className="prow"; r.innerHTML='<span class="sym"></span><span class="n"></span><span class="q"></span>'; symTile(r.querySelector(".sym"),code,i,true); r.querySelector(".n").innerHTML=esc(colorOf(code).name)+'<span class="code">DMC '+esc(code)+'</span>'; r.querySelector(".q").textContent=cnt[i]; box.appendChild(r); }); }
-function mdDraw(){ const c=$("mdCanvas"), host=$("mdViewer"); const w=host.clientWidth, h=host.clientHeight; if(!w||!h){ requestAnimationFrame(mdDraw); return; } const d=Math.min(window.devicePixelRatio||1,2); c.width=Math.round(w*d); c.height=Math.round(h*d); const g=c.getContext("2d"); g.setTransform(d,0,0,d,0,0); g.clearRect(0,0,w,h);
+function mdDraw(){ const c=$("mdCanvas"), host=$("mdViewer"); const w=host.clientWidth, h=host.clientHeight; if(!w||!h){ requestAnimationFrame(mdDraw); return; }
+  if(mdView==="prev"&&mdChart&&mode==="chart"){ c.getContext("2d").clearRect(0,0,c.width,c.height); showPreview(); vtSync(); return; } hidePreview(); vtSync(); const d=Math.min(window.devicePixelRatio||1,2); c.width=Math.round(w*d); c.height=Math.round(h*d); const g=c.getContext("2d"); g.setTransform(d,0,0,d,0,0); g.clearRect(0,0,w,h);
   const pad=28, top=20, bottom=64;
   if(mdView==="src"||!mdChart){ if(!MC) return; loadImage(MC.src).then(im=>{ if(mdView!=="src"&&mdChart) return; const k=Math.min((w-pad*2)/im.naturalWidth,(h-top-bottom)/im.naturalHeight); const iw=im.naturalWidth*k, ih=im.naturalHeight*k; g.globalAlpha=mdChart?1:0.45; g.drawImage(im,(w-iw)/2,top+(h-top-bottom-ih)/2,iw,ih); g.globalAlpha=1; }); return; }
   const ch=mdChart, cs=Math.min((w-pad*2)/ch.w,(h-top-bottom)/ch.h), ox=(w-ch.w*cs)/2, oy=top+(h-top-bottom-ch.h*cs)/2;
@@ -2598,7 +2661,9 @@ new ResizeObserver(()=>{ if(mode==="chart") mdDraw(); }).observe($("mdViewer"));
 let mdDelArmed=false;
 $("mdDelete").addEventListener("click",async()=>{ if(!MC) return; if(!mdDelArmed){ mdDelArmed=true; $("mdDelete").lastChild.textContent="Точно удалить схему и её работы?"; return; }
   const id=MC.id; for(const w of worksOf(id)){ WORKS.delete(w.id); await Store.delWork(w.id); } CHARTS.delete(id); await Store.delChart(id); toast("Схема удалена"); location.hash=""; });
-async function startFromChart(){ const C=MC; let ch=null; { try{ ch=await chartFor(C,cellsFor(C.cm,C.type),C.colors); }catch(_){ toast("Не получилось прочитать картинку"); return; } }
+let starting=false; // двойное касание «Начать вышивать» не создаёт две работы
+async function startFromChart(){ if(starting) return; starting=true; try{ await startFromChart_(); } finally{ starting=false; } }
+async function startFromChart_(){ const C=MC; let ch=null; { try{ ch=await chartFor(C,cellsFor(C.cm,C.type),C.colors); }catch(_){ toast("Не получилось прочитать картинку"); return; } }
   const n=worksOf(C.id).length; const w={id:newId("w"),chart:C.id,name:C.name+(n?" · "+(n+1):""),type:C.type,shape:C.shape,stitch:C.stitch||"cross",fabric:C.type==="cross"?"ecru":"white",glow:"warm",w:ch.w,h:ch.h,pal:ch.pal.slice(),grid:Int16Array.from(ch.grid),cells:new Int16Array(ch.w*ch.h).fill(-1),opts:{cm:C.cm,colors:C.colors},step:0,updated:Date.now(),count:0,thumb:null};
   WORKS.set(w.id,w); await Store.putWork(w); location.hash="work-"+w.id; }
 
@@ -2621,9 +2686,9 @@ $("nsOk").addEventListener("click",async()=>{ const w=cellsFor(parseFloat($("nsW
 
 /* ---------- Рабочее пространство ---------- */
 function normWork(rec){ rec.cells=toI16(rec.cells&&rec.cells.length?rec.cells:new Int16Array(rec.w*rec.h).fill(-1)); if(rec.grid) rec.grid=toI16(rec.grid); rec.pal=rec.pal||[]; rec.glow=rec.glow||rec.light||"warm"; rec.fabric=rec.fabric||"white"; rec.shape=rec.shape||"square"; rec.stitch=rec.stitch||"cross"; rec.step=rec.step|0; if(rec.grid&&rec.opts&&!rec.opts.cm) rec.opts.cm=Math.round(rec.w*TYPES[rec.type].pitch); return rec; }
-function enterWork(id){ const rec=WORKS.get(id); if(!rec){ location.hash=""; setTimeout(()=>toast("Такой работы нет на этом устройстве"),50); return; }
+function enterWork(id){ hidePreview(); const rec=WORKS.get(id); if(!rec){ location.hash=""; setTimeout(()=>toast("Такой работы нет на этом устройстве"),50); return; }
   if(cur&&cur.id===id&&mode==="work") return; leaveWork(); mode="work"; cur=normWork(rec);
-  undoStack.length=0; redoStack.length=0; sel=null; selCell=-1; hintOn=false; picOn=false; chip="all"; query=""; visList=null; $("q").value=""; hideEdit(); handOn=false; $("tHand").classList.remove("on"); canvas.classList.remove("handmode");
+  undoStack.length=0; redoStack.length=0; sel=null; selCell=-1; hintOn=false; picOn=false; chip="all"; query=""; visList=null; $("q").value=""; hideEdit(); handOn=false; $("tHand").classList.remove("on"); canvas.classList.remove("handmode"); setErase(false); resetPointers(); outer=null; document.body.classList.remove("dragging"); hideGhost();
   ["tHint","tPic"].forEach(b=>{ $(b).classList.remove("on"); $(b).setAttribute("aria-pressed","false"); }); U.uPic.value=0; U.uSel.value=-1;
   recount(); show("ws"); resize(); setupBoard(); $("wsTitle").textContent=rec.name; $("wsBackLbl").textContent=rec.chart?"Схема":"Главная"; $("saved").textContent=""; glowDot();
   setLibOpen(ls.get("mystitch.lib")!=="0"&&!(innerWidth<=860&&ls.get("mystitch.lib")===null)); renderChips(); renderList(); updateTools(); buildBlocks();
