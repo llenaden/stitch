@@ -968,7 +968,7 @@ button.st-row{cursor:pointer}button.st-row:hover b{color:var(--accent)}
 .basedot.lit.off{background:#3a3a42;box-shadow:none}
 /* полотно */
 #view{cursor:crosshair}
-#view.hand,#view.panning{cursor:grab}
+#view.handmode,#view.panning{cursor:grab}
 #view.grabbing{cursor:grabbing}
 #view.pick{cursor:cell}
 /* страница схемы: предпросмотр — картинка целиком */
@@ -1068,7 +1068,8 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 
 /* панели всегда над вышивкой: холст — нижний слой, панели — свои слои поверх (Safari иногда рисует WebGL поверх стекла) */
 #view{z-index:0}
-#ws .wbar,#ws .pop,#ws .palette,#ws .edit,#ws .toast{will-change:transform;transform:translateZ(0)}
+#ws .wbar,#ws .pop,#ws .palette,#ws .edit{will-change:transform;transform:translateZ(0)}
+#ws .toast{transform:translate3d(-50%,0,0)}
 #ws .wbar{z-index:20} #ws .pop{z-index:12} #ws .hand{z-index:14} #ws .zoomer{z-index:13;transform:translate3d(0,-50%,0)} #ws .edit{z-index:40} #ws .palette{z-index:60} #ws .toast{z-index:70}
 #ws .hand{transform:translate3d(-50%,0,0)}
 @media (max-width:600px){ #ws .hand{transform:translateZ(0)} }
@@ -1097,6 +1098,18 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 .rug-o.none{background:var(--surface-2);display:grid;place-items:center;font-size:11px;font-weight:600;color:var(--muted);image-rendering:auto;text-align:center;line-height:1.2;padding:4px}
 .hb.icon{width:44px;padding:0}
 .hb.icon .ic{width:20px;height:20px}
+/* долгое нажатие на iPad: никакого выделения текста и меню «Скопировать / Найти» — это рабочий стол, а не страница */
+#ws,#ws *,.hand,.hand *,#setPop,#setPop *{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+#ws input,#ws textarea,#setPop input{-webkit-user-select:text;user-select:text;-webkit-touch-callout:default}
+#view{-webkit-tap-highlight-color:transparent}
+/* панель цветов: спокойное выделение */
+#list .item.it0{background:transparent;border-color:transparent}
+#list .item.on,#list .item.it0.on{background:rgba(255,255,255,.06);border-color:rgba(240,86,155,.5)}
+#list .item .need{background:rgba(255,255,255,.07);color:var(--muted);font-weight:600;margin-left:6px}
+#list .item:hover{background:rgba(255,255,255,.04)}
+/* окошко цвета (фон, цвет в руке) — всегда справа, под кнопками верхней полосы */
+#ws .palette,#ws.side-l .palette{left:auto;right:max(12px, env(safe-area-inset-right, 0px))}
+#ws.side-l:has(#edit:not([hidden])) .palette{right:max(12px, env(safe-area-inset-right, 0px))}
 </style>
 </head>
 <body>
@@ -1937,7 +1950,7 @@ function setupBoard(){ // размеры и текстуры под текущу
   W=cur.w; H=cur.h; S=Math.max(W,H); margin=Math.max(2.5,S*0.035);
   const pw=W+2*margin, ph=H+2*margin, rim=0;
   paper.scale.set(pw,ph,1); paper.position.set(0,0,0);
-  pad.scale.set(pw+2*rim,PAD_H,ph+2*rim); pad.position.set(0,-SHEET_T-PAD_H/2,0);
+  pad.scale.set(pw-0.06,PAD_H,ph-0.06); pad.position.set(0,-SHEET_T-0.03-PAD_H/2,0);
   const ty=-SHEET_T-PAD_H, slab=Math.max(2.5,S*0.03); const ts=S*7+200; table.scale.set(ts,slab,ts); table.position.y=ty-slab/2; padW=pw+2*rim; padH=ph+2*rim; floor.scale.set(ts*3,ts*3,1); floor.position.y=ty-slab-Math.max(25,S*0.6);
   halo.position.y=ty+Math.max(0.15,S*0.002); halo.material.polygonOffset=true; halo.material.polygonOffsetFactor=-4; halo.scale.set((pw+2*rim)*1.32,(ph+2*rim)*1.32,1);
   U.uGrid.value.set(W,H); U.uMargin.value=margin; U.uCross.value=cur.type==="cross"?1:0;
@@ -1985,8 +1998,8 @@ function updateLOD(){ const th=Math.tan(camera.fov*Math.PI/360); chunks.forEach(
 /* призрак: отпечаток насадки летит за пальцем, прилипает к клеткам и встаёт на место */
 let ghost=null;
 function ghostGeo(){ if(ghost){ scene.remove(ghost); ghost.dispose(); } ghost=new THREE.InstancedMesh(geoFor(cur.type,shapeOf(cur),true),ghostMat,25); ghost.count=0; ghost.visible=false; ghost.renderOrder=3; ghost.frustumCulled=false; scene.add(ghost); }
-const G={cells:[],lift:0,anim:null};
-function showGhost(cells,code,lift){ G.cells=cells; G.lift=lift; if(!ghost) return; if(!cells.length||!code){ ghost.visible=false; ghost.count=0; needRender=true; return; }
+const G={cells:[],lift:0,anim:null,t:0};
+function showGhost(cells,code,lift){ G.cells=cells; G.lift=lift; G.t=performance.now(); if(!ghost) return; if(!cells.length||!code){ ghost.visible=false; ghost.count=0; needRender=true; return; }
   ghostMat.color.set(hexOf(code)); ghostMat.emissive.set(hexOf(code)).multiplyScalar(0.18); let n=0;
   for(const i of cells){ if(n>=25) break; const c=i%W, r=(i-c)/W; _m.makeTranslation(c-W/2+0.5,lift,r-H/2+0.5); ghost.setMatrixAt(n++,_m); }
   ghost.count=n; ghost.instanceMatrix.needsUpdate=true; ghost.visible=true; needRender=true; }
@@ -1996,7 +2009,7 @@ function tickGhost(now){ const a=G.anim; if(!a) return; const k=Math.min(1,(now-
 
 /* камера: стол крутится, наклоняется, едет и приближается — до одной стразинки во весь экран */
 const cam={theta:0,phi:0.62,r:60,t:new THREE.Vector3(),g:{theta:0,phi:0.62,r:60,t:new THREE.Vector3()}};
-const PHI_MIN=0.03, PHI_MAX=1.42, R_MIN=1.3;
+const PHI_MIN=0.05, PHI_MAX=1.42, R_MIN=1.3;
 const rMax=()=>S*3.2+40;
 function camGo(t,r,phi,theta,instant){ if(t) cam.g.t.copy(t); if(r) cam.g.r=clamp(r,R_MIN,rMax()); if(phi!=null) cam.g.phi=clamp(phi,PHI_MIN,PHI_MAX); if(theta!=null) cam.g.theta=theta; if(instant){ cam.t.copy(cam.g.t); cam.r=cam.g.r; cam.phi=cam.g.phi; cam.theta=cam.g.theta; } needRender=true; }
 function clampTarget(v){ const e=S*0.75+margin; v.x=clamp(v.x,-e,e); v.z=clamp(v.z,-e,e); v.y=0; return v; }
@@ -2010,9 +2023,10 @@ function updateCamera(){ const k=0.28; let mv=false; const st=(a,b)=>{ if(Math.a
 function fitAll(instant){ const th=Math.tan(camera.fov*Math.PI/360), asp=Math.max(0.3,camera.aspect); const half=Math.max((H+2*margin)/2,(W+2*margin)/2/asp)*1.12; camGo(new THREE.Vector3(0,0,0),half/th,0.5,0,instant); }
 function flyToCells(x0,y0,x1,y1,instant){ const th=Math.tan(camera.fov*Math.PI/360), asp=Math.max(0.3,camera.aspect); const w=x1-x0, h=y1-y0; const half=Math.max(h/2,w/2/asp)*1.9+1; const t=new THREE.Vector3((x0+x1)/2-W/2,0,(y0+y1)/2-H/2);
   camGo(t,half/th,Math.min(cam.g.phi,0.7),null,instant); }
+function snapCam(){ cam.theta=cam.g.theta; cam.phi=cam.g.phi; cam.r=cam.g.r; cam.t.copy(cam.g.t); needRender=true; }
 function panBy(dx,dy){ const th=Math.tan(camera.fov*Math.PI/360), k=2*cam.r*th/H_px; const st=Math.sin(cam.theta), ct=Math.cos(cam.theta); const sp=Math.max(0.35,Math.cos(cam.phi));
   cam.g.t.x-=(ct*dx)*k; cam.g.t.z-=(-st*dx)*k; cam.g.t.x-=st*dy*k/sp; cam.g.t.z-=ct*dy*k/sp; clampTarget(cam.g.t); needRender=true; }
-function orbitBy(dx,dy){ cam.g.theta-=dx*0.0075; cam.g.phi=clamp(cam.g.phi-dy*0.006,PHI_MIN,PHI_MAX); needRender=true; }
+function orbitBy(dx,dy){ cam.g.theta-=dx*0.0072; cam.g.phi=clamp(cam.g.phi-dy*0.0062,PHI_MIN,PHI_MAX); snapCam(); }
 function zoomAt(f,px,py){ const p=worldAt(px,py,0); const nr=clamp(cam.g.r/f,R_MIN,rMax()), k=1-nr/cam.g.r; if(p){ cam.g.t.x+=(p.x-cam.g.t.x)*k; cam.g.t.z+=(p.z-cam.g.t.z)*k; clampTarget(cam.g.t); } cam.g.r=nr; needRender=true; }
 
 /* выбор клетки под пальцем */
@@ -2029,7 +2043,7 @@ function frame(now){ requestAnimationFrame(frame); if(ws.hidden||!cur) return;
   // холст всегда во всё окно: если размер окна поменялся незаметно для наблюдателя — подгоняем
   if(canvas.clientWidth&&(Math.abs(canvas.clientWidth-W_px)>1||Math.abs(canvas.clientHeight-H_px)>1)) resize();
   const mv=updateCamera(); if(dirtyChunks.size){ flushChunks(); needRender=true; } if(cellTexDirty){ cellTex.needsUpdate=true; cellTexDirty=false; needRender=true; }
-  if(hintOn&&sel&&isChart()){ U.uTime.value=now/1000; needRender=true; } if(G.anim){ tickGhost(now); needRender=true; }
+  if(hintOn&&sel&&isChart()){ U.uTime.value=now/1000; needRender=true; } if(G.anim){ tickGhost(now); needRender=true; } else if(ghost&&ghost.visible&&!outer&&!(gest&&gest.kind==="stamp")&&now-G.t>700) hideGhost();
   if(mv||needRender){ const th=Math.tan(camera.fov*Math.PI/360); U.uPx.value=H_px/(2*camera.position.distanceTo(cam.t)*th); updateLOD();
     if(selCell>=0){ const c=selCell%W, r=(selCell-c)/W; selRing.position.set(c-W/2+0.5,0.03,r-H/2+0.5); selRing.visible=true; } else selRing.visible=false;
     if(shadowDirty&&now-lastShadow>110){ renderer.shadowMap.needsUpdate=true; shadowDirty=false; lastShadow=now; }
@@ -2084,6 +2098,10 @@ function toolIcon(t,rot){ const c=document.createElement("canvas"); c.width=c.he
 const ptrs=new Map(); let gest=null;
 const posOf=e=>{ const r=canvas.getBoundingClientRect(); return {x:e.clientX-r.left,y:e.clientY-r.top}; };
 canvas.addEventListener("contextmenu",e=>e.preventDefault());
+// iPad: долгое нажатие не выделяет страницу и не открывает меню
+document.addEventListener("selectstart",e=>{ if(!ws.hidden&&!(e.target.closest&&e.target.closest("input,textarea"))) e.preventDefault(); });
+ws.addEventListener("contextmenu",e=>{ if(!e.target.closest("input,textarea")) e.preventDefault(); });
+canvas.addEventListener("touchstart",e=>{ if(e.cancelable) e.preventDefault(); },{passive:false});
 function cellsLine(a,b){ const ac=a%W, ar=(a-ac)/W, bc=b%W, br=(b-bc)/W, n=Math.max(Math.abs(bc-ac),Math.abs(br-ar)), o=[]; for(let k=1;k<=n;k++){ o.push(Math.round(ar+(br-ar)*k/n)*W+Math.round(ac+(bc-ac)*k/n)); } return o; }
 canvas.addEventListener("pointerdown",e=>{ if(!cur) return; const p=posOf(e); ptrs.set(e.pointerId,p); try{ canvas.setPointerCapture(e.pointerId); }catch(_){}
   hideSetPop(); hidePalette();
@@ -2098,28 +2116,28 @@ canvas.addEventListener("pointerdown",e=>{ if(!cur) return; const p=posOf(e); pt
   selCell=-1; hideEdit();
   if(dragMode==="stamp"&&isChart()&&fitChart&&!footprint(i).length){ toast("Здесь по схеме другой цвет. Откройте замок в руке, чтобы ставить куда угодно"); gest={kind:"orbit",x:p.x,y:p.y,moved:false,cell:-1}; return; }
   if(dragMode==="stamp"){ gest={kind:"stamp",x:p.x,y:p.y}; showGhost(footprint(i),sel,LIFT); }
-  else { beginStroke(); stampAt(i); gest={kind:"paint",last:i}; updateCountsUI(); } });
+  else { hideGhost(); beginStroke(); stampAt(i); gest={kind:"paint",last:i}; updateCountsUI(); } });
 canvas.addEventListener("pointermove",e=>{ const p=posOf(e);
   if(!ptrs.has(e.pointerId)){ if(eraseOn){ return; } // мышь без нажатия: отпечаток показывает, куда встанут детали
     if(e.pointerType==="mouse"&&cur&&sel&&!handOn&&!gest&&!outer){ const i=cellAt(p.x,p.y); if(i<0||cur.cells[i]>=0) hideGhost(); else showGhost(footprint(i),sel,0.02); } return; }
   const prev=ptrs.get(e.pointerId); ptrs.set(e.pointerId,p); if(!gest) return;
   if(gest.kind==="two"){ if(ptrs.size<2) return; const [a,b]=[...ptrs.values()], d=Math.hypot(a.x-b.x,a.y-b.y), mid={x:(a.x+b.x)/2,y:(a.y+b.y)/2}, ang=Math.atan2(b.y-a.y,b.x-a.x);
-    if(gest.d>0) zoomAt(d/gest.d,mid.x,mid.y); panBy(mid.x-gest.mid.x,mid.y-gest.mid.y); gest.d=d; gest.mid=mid; gest.ang=ang; return; }
+    if(gest.d>0) zoomAt(d/gest.d,mid.x,mid.y); panBy(mid.x-gest.mid.x,mid.y-gest.mid.y); snapCam(); gest.d=d; gest.mid=mid; gest.ang=ang; return; }
   const dx=p.x-prev.x, dy=p.y-prev.y;
-  if(gest.kind==="orbit"||gest.kind==="pan"){ if(!gest.moved&&Math.hypot(p.x-gest.x,p.y-gest.y)<5) return; gest.moved=true; if(gest.kind==="pan") panBy(dx,dy); else orbitBy(dx,dy); return; }
+  if(gest.kind==="orbit"||gest.kind==="pan"){ if(!gest.moved&&Math.hypot(p.x-gest.x,p.y-gest.y)<5) return; gest.moved=true; if(gest.kind==="pan"){ panBy(dx,dy); snapCam(); } else orbitBy(dx,dy); return; }
   if(gest.kind==="tap"){ if(Math.hypot(p.x-gest.x,p.y-gest.y)<7) return; // потянули с поставленной детали
     if(dragMode==="stamp"){ gest={kind:"stamp",x:gest.x,y:gest.y}; } else { beginStroke(); gest={kind:"paint",last:gest.cell}; } }
   if(gest.kind==="stamp"){ const i=cellAt(p.x,p.y); showGhost(i<0?[]:footprint(i),sel,LIFT); return; }
   if(gest.kind==="erase"){ const i=cellAt(p.x,p.y); if(i<0||i===gest.last) return; (gest.last>=0?cellsLine(gest.last,i):[i]).forEach(eraseAt); gest.last=i; updateCountsUI(); return; }
   if(gest.kind==="paint"){ const i=cellAt(p.x,p.y); if(i<0||i===gest.last) return; const path=gest.last>=0?cellsLine(gest.last,i):[i]; path.forEach(stampAt); gest.last=i; updateCountsUI(); } });
-const up=e=>{ if(!ptrs.has(e.pointerId)) return; ptrs.delete(e.pointerId); canvas.classList.remove("grabbing"); if(!gest) return;
+const up=e=>{ if(!ptrs.has(e.pointerId)) return; ptrs.delete(e.pointerId); canvas.classList.remove("grabbing"); if(!gest){ hideGhost(); return; }
   if(gest.kind==="two"){ if(ptrs.size<2){ gest=null; } return; }
   const g=gest; gest=null;
   if(g.kind==="orbit"){ if(!g.moved&&g.cell>=0){ if(cur.cells[g.cell]>=0) selectCell(g.cell); else if(!sel&&!handOn) toast("Выберите цвет в панели — и касайтесь клеток"); } return; }
   if(g.kind==="tap"){ selectCell(g.cell); return; }
   if(g.kind==="stamp"){ const cells=G.cells.slice(); if(!cells.length){ hideGhost(); return; } dropGhost(cells,sel,()=>{ commitCells(cells); }); return; }
   if(g.kind==="paint"||g.kind==="erase") endStroke(); };
-canvas.addEventListener("pointerup",up); canvas.addEventListener("pointercancel",up);
+canvas.addEventListener("pointerup",up); canvas.addEventListener("pointercancel",e=>{ if(gest&&gest.kind==="stamp"){ gest=null; hideGhost(); ptrs.delete(e.pointerId); return; } up(e); });
 canvas.addEventListener("pointerleave",e=>{ if(e.pointerType==="mouse"&&!gest&&!outer) hideGhost(); });
 canvas.addEventListener("wheel",e=>{ if(!cur) return; e.preventDefault(); const p=posOf(e);
   if(e.ctrlKey||e.metaKey||(!e.shiftKey&&Math.abs(e.deltaX)<1&&e.deltaMode===0)) zoomAt(Math.exp(-e.deltaY*(e.ctrlKey?0.01:0.0016)),p.x,p.y); else panBy(-e.deltaX,-e.deltaY); },{passive:false});
@@ -2183,7 +2201,7 @@ function setLibOpen(on){ $("libPop").hidden=!on; $("tLib").classList.toggle("on"
 $("tLib").addEventListener("click",()=>setLibOpen($("libPop").hidden));
 $("tSide").addEventListener("click",()=>{ ws.classList.toggle("side-l"); ls.set("mystitch.side",ws.classList.contains("side-l")?"l":"r"); });
 if(ls.get("mystitch.side")==="l") ws.classList.add("side-l");
-function setHand(on){ handOn=on; $("tHand").classList.toggle("on",on); $("tHand").setAttribute("aria-pressed",String(on)); canvas.classList.toggle("hand",on); if(on) hideGhost(); if(cur) toast(on?"Ладошка: крутите стол одним пальцем, двумя — двигайте и приближайте":"Ставим детали: касание — деталь, двумя пальцами — стол"); }
+function setHand(on){ handOn=on; $("tHand").classList.toggle("on",on); $("tHand").setAttribute("aria-pressed",String(on)); canvas.classList.toggle("handmode",on); if(on) hideGhost(); if(cur) toast(on?"Ладошка: крутите стол одним пальцем, двумя — двигайте и приближайте":"Ставим детали: касание — деталь, двумя пальцами — стол"); }
 $("tHand").addEventListener("click",()=>setHand(!handOn));
 $("tFit").addEventListener("click",()=>fitAll());
 $("tUndo").addEventListener("click",undo); $("tRedo").addEventListener("click",redo);
@@ -2471,7 +2489,7 @@ $("nsOk").addEventListener("click",async()=>{ const w=cellsFor(parseFloat($("nsW
 function normWork(rec){ rec.cells=toI16(rec.cells&&rec.cells.length?rec.cells:new Int16Array(rec.w*rec.h).fill(-1)); if(rec.grid) rec.grid=toI16(rec.grid); rec.pal=rec.pal||[]; rec.glow=rec.glow||rec.light||"warm"; rec.fabric=rec.fabric||"white"; rec.shape=rec.shape||"square"; rec.stitch=rec.stitch||"cross"; rec.step=rec.step|0; if(rec.grid&&rec.opts&&!rec.opts.cm) rec.opts.cm=Math.round(rec.w*TYPES[rec.type].pitch); return rec; }
 function enterWork(id){ const rec=WORKS.get(id); if(!rec){ location.hash=""; setTimeout(()=>toast("Такой работы нет на этом устройстве"),50); return; }
   if(cur&&cur.id===id&&mode==="work") return; leaveWork(); mode="work"; cur=normWork(rec);
-  undoStack.length=0; redoStack.length=0; sel=null; selCell=-1; hintOn=false; picOn=false; chip="all"; query=""; visList=null; $("q").value=""; hideEdit(); handOn=false; $("tHand").classList.remove("on"); canvas.classList.remove("hand");
+  undoStack.length=0; redoStack.length=0; sel=null; selCell=-1; hintOn=false; picOn=false; chip="all"; query=""; visList=null; $("q").value=""; hideEdit(); handOn=false; $("tHand").classList.remove("on"); canvas.classList.remove("handmode");
   ["tHint","tPic"].forEach(b=>{ $(b).classList.remove("on"); $(b).setAttribute("aria-pressed","false"); }); U.uPic.value=0; U.uSel.value=-1;
   recount(); show("ws"); resize(); setupBoard(); $("wsTitle").textContent=rec.name; $("wsBackLbl").textContent=rec.chart?"Схема":"Главная"; $("saved").textContent=""; glowDot();
   setLibOpen(ls.get("mystitch.lib")!=="0"&&!(innerWidth<=860&&ls.get("mystitch.lib")===null)); renderChips(); renderList(); updateTools(); buildBlocks();
