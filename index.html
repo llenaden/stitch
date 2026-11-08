@@ -1231,7 +1231,7 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 
 <!-- ГЛАВНАЯ -->
 <section class="scr" id="scrHome" hidden>
-  <header class="topbar"><span class="wordmark"><i class="logo" aria-hidden="true"></i>MyStitch<small class="ver">версия 19</small></span><span class="grow"></span>
+  <header class="topbar"><span class="wordmark"><i class="logo" aria-hidden="true"></i>MyStitch<small class="ver">версия 20</small></span><span class="grow"></span>
     <div class="hnav"><div class="hseg" role="tablist" aria-label="Раздел"><button role="tab" id="hsModels" aria-selected="true"><span class="lg">Готовые схемы</span><span class="sh">Схемы</span></button><button role="tab" id="hsOwn" aria-selected="false"><span class="lg">Самостоятельная вышивка</span><span class="sh">Своя</span></button></div><button class="hprof acct-open" id="hProfile" aria-label="Персонализация и память" title="Персонализация и память"><svg class="ic"><use href="#i-user"/></svg></button></div>
     <span class="grow"></span>
     <button class="pill tb-load" id="tbLoad" tabindex="-1"><svg class="ic"><use href="#i-image"/></svg><span>Загрузить картинку</span></button></header>
@@ -1600,7 +1600,8 @@ const TYPES={diamond:{n:"Алмазная вышивка",unit:"стразинк
 const MAX_CELLS=600;
 const cmOf=(n,type)=>(n*TYPES[type].pitch).toLocaleString("ru-RU",{maximumFractionDigits:1});
 const cellsFor=(cm,type)=>clamp(Math.round(cm/TYPES[type].pitch),8,MAX_CELLS);
-const timeLabel=(n,type)=>{ const m=Math.max(1,Math.round(n*TYPES[type].sec/60)); if(m<60) return "~"+m+" мин"; const h=Math.round(m/60); if(h<48) return "~"+h+" ч"; return "~"+h+" ч ("+Math.round(h/8)+" "+plural(Math.round(h/8),"вечер","вечера","вечеров")+" по 8 ч)"; };
+// в приложении любая клетка ставится одним касанием — время зависит только от числа клеток, не от вида вышивки
+const timeLabel=(n,type)=>{ const m=Math.max(1,Math.round(n*TYPES.diamond.sec/60)); if(m<60) return "~"+m+" мин"; const h=Math.round(m/60); if(h<48) return "~"+h+" ч"; return "~"+h+" ч ("+Math.round(h/8)+" "+plural(Math.round(h/8),"вечер","вечера","вечеров")+")"; };
 const BS=10; // квадрат схемы — 10×10 клеток, как в бумажных схемах
 const toI16=a=>a instanceof Int16Array?a:Int16Array.from(a||[]);
 const i16ToB64=a=>{ const u=new Uint8Array(a.buffer,a.byteOffset,a.byteLength); let s=""; for(let i=0;i<u.length;i+=0x8000) s+=String.fromCharCode.apply(null,u.subarray(i,i+0x8000)); return btoa(s); };
