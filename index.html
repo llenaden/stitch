@@ -1231,7 +1231,7 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 
 <!-- ГЛАВНАЯ -->
 <section class="scr" id="scrHome" hidden>
-  <header class="topbar"><span class="wordmark"><i class="logo" aria-hidden="true"></i>MyStitch<small class="ver">версия 22</small></span><span class="grow"></span>
+  <header class="topbar"><span class="wordmark"><i class="logo" aria-hidden="true"></i>MyStitch<small class="ver">версия 23</small></span><span class="grow"></span>
     <div class="hnav"><div class="hseg" role="tablist" aria-label="Раздел"><button role="tab" id="hsModels" aria-selected="true"><span class="lg">Готовые схемы</span><span class="sh">Схемы</span></button><button role="tab" id="hsOwn" aria-selected="false"><span class="lg">Самостоятельная вышивка</span><span class="sh">Своя</span></button></div><button class="hprof acct-open" id="hProfile" aria-label="Персонализация и память" title="Персонализация и память"><svg class="ic"><use href="#i-user"/></svg></button></div>
     <span class="grow"></span>
     <button class="pill tb-load" id="tbLoad" tabindex="-1"><svg class="ic"><use href="#i-image"/></svg><span>Загрузить картинку</span></button></header>
@@ -1868,7 +1868,7 @@ function lightSwatch(L){ const spots=[]; const at=(x,z,y)=>{ const l=Math.hypot(
 const LIGHT_SW=LIGHTS.map(lightSwatch);
 let lightMode=clamp(+(ls.get("mystitch.light")||0)||0,0,LIGHTS.length-1);
 const hemi=new THREE.HemisphereLight(0xffffff,0x3b322b,0.25); scene.add(hemi);
-const key=new THREE.DirectionalLight(0xfff5e8,2.3); key.castShadow=true; key.shadow.mapSize.set(4096,4096); key.shadow.bias=-0.00025; key.shadow.normalBias=0.015; key.shadow.radius=2.5; scene.add(key,key.target);
+const key=new THREE.DirectionalLight(0xfff5e8,2.3); key.castShadow=true; key.shadow.mapSize.set(2048,2048); key.shadow.bias=-0.00025; key.shadow.normalBias=0.015; key.shadow.radius=2.5; scene.add(key,key.target);
 const fill=new THREE.DirectionalLight(0xdfe8ff,0.5); scene.add(fill,fill.target);
 const xLights=[0,1,2,3].map(()=>{ const l=new THREE.DirectionalLight(0xffffff,0); scene.add(l,l.target); return l; });
 
@@ -2148,9 +2148,11 @@ const rugMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.95,metal
 const RUGU={tRug:{value:null},uRugN:{value:new THREE.Vector2(RUG_W,RUG_H)}};
 rugMat.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,RUGU);
   sh.fragmentShader=sh.fragmentShader.replace("#include <common>","#include <common>\nuniform sampler2D tRug; uniform vec2 uRugN;").replace("#include <map_fragment>",`
-  { vec2 g=vUv*uRugN; vec2 cl=clamp(floor(g),vec2(0.0),uRugN-1.0); vec2 f=fract(g); float aa=max(fwidth(g.x),fwidth(g.y));
-    vec4 pc=texelFetch(tRug,ivec2(cl),0); vec4 far=texture2D(tRug,vUv);
-    vec3 cv=vec3(0.904,0.882,0.835);
+  { vec2 g=vUv*uRugN; float aa=max(fwidth(g.x),fwidth(g.y)); vec4 far=texture2D(tRug,vUv);
+    vec3 cv=vec3(0.904,0.882,0.835); vec3 avg=far.rgb*mix(0.95,0.86,far.a);
+    if(aa>0.8){ diffuseColor.rgb*=avg; } else {
+    vec2 cl=clamp(floor(g),vec2(0.0),uRugN-1.0); vec2 f=fract(g); vec4 pc=texelFetch(tRug,ivec2(cl),0);
+    
     vec2 hc=f-floor(f+0.5); float hole=smoothstep(0.075,0.075+aa*1.2,length(hc)); vec3 col=mix(cv*0.55,cv,hole);
     vec2 wv=abs(fract(g*vec2(1.0,1.0)+0.5)-0.5); col*=0.96+0.04*smoothstep(0.0,0.25,min(wv.x,wv.y));
     if(pc.a>0.5){ float w=0.255;
@@ -2160,9 +2162,8 @@ rugMat.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,RUGU);
       float tw1=0.9+0.1*sin((s1*5.0/w+l1*9.0)*3.14159), tw2=0.9+0.1*sin((s2*5.0/w-l2*9.0)*3.14159);
       float r1=1.0-0.42*pow(abs(s1)/w,2.0), r2=1.0-0.42*pow(abs(s2)/w,2.0);
       col=mix(col,pc.rgb*0.8*tw2*r2,c2); col=mix(col,pc.rgb*tw1*r1,c1); }
-    vec3 avg=far.rgb*mix(0.95,0.86,far.a);
     col=mix(col,avg,smoothstep(0.35,0.8,aa));
-    diffuseColor.rgb*=col; }`); };
+    diffuseColor.rgb*=col; } }`); };
 rugMat.customProgramCacheKey=()=>"rugx";
 const rug=new THREE.Mesh(new THREE.PlaneGeometry(1,1),rugMat); rug.rotation.x=-Math.PI/2; rug.receiveShadow=true; rug.visible=false; scene.add(rug);
 let padW=10,padH=10;
@@ -2197,7 +2198,7 @@ function setupBoard(){ // размеры и текстуры под текущу
   if(!palTex){ palTex=new THREE.DataTexture(new Uint8Array(256*4),256,1,THREE.RGBAFormat); palTex.colorSpace=THREE.SRGBColorSpace; palTex.magFilter=palTex.minFilter=THREE.NearestFilter; U.tPal.value=palTex; }
   syncPal(); for(let i=0;i<W*H;i++) texCell(i); cellTex.needsUpdate=true;
   // тень от лампы — на весь лист
-  const sc=key.shadow.camera, e=S*0.62+margin; key.shadow.radius=clamp(4096/(2*e)*0.38,1.5,24); sc.left=-e; sc.right=e; sc.top=e; sc.bottom=-e; sc.near=0.5; sc.far=S*6+200; sc.updateProjectionMatrix();
+  const sc=key.shadow.camera, e=S*0.62+margin; key.shadow.radius=clamp(2048/(2*e)*0.38,1.2,14); sc.left=-e; sc.right=e; sc.top=e; sc.bottom=-e; sc.near=0.5; sc.far=S*6+200; sc.updateProjectionMatrix();
   applyFabric(); applyGlow(); applyTable(); placeLights(); buildAllChunks(); shadowDirty=true; needRender=true; }
 function syncPal(){ const d=palTex.image.data; for(let i=0;i<256;i++){ const code=cur.pal[i]; const rgb=code?colorOf(code).rgb:[0,0,0]; d[i*4]=rgb[0]; d[i*4+1]=rgb[1]; d[i*4+2]=rgb[2]; d[i*4+3]=255; } palTex.needsUpdate=true; palLin=cur.pal.map(c=>new THREE.Color(hexOf(c))); }
 let palLin=[];
@@ -2233,16 +2234,17 @@ function rebuildChunk(k){ let o=chunks.get(k); if(!o) o=makeChunk(k); const {cx,
       const base=palLin[p]||_c.set(0xffffff), v=neat?1:0.94+h2*0.1, lift=cross?0.02:0.055; _c.setRGB(lift+base.r*v*(1-lift),lift+base.g*v*(1-lift),lift+base.b*v*(1-lift)); A.setColorAt(n,_c); n++; } }
   o.A.count=o.B.count=n; A.instanceMatrix.needsUpdate=true; if(A.instanceColor) A.instanceColor.needsUpdate=true; }
 /* посадка: страза опускается точно в свою клетку и чуть пружинит, крестик «прошивается» из центра */
-const SETTLE_MS=190, settle=new Map(), texHold=new Set(); // цветная основа под деталью проявляется в тот миг, когда деталь касается клетки
+const SETTLE_MS=170, settle=new Map(), texHold=new Set(); // цветная основа под деталью проявляется в тот миг, когда деталь касается клетки
 const easeOut=x=>1-Math.pow(1-x,3);
 function settlePose(k,cross){ if(cross){ const e=k<1?1+2.2*Math.pow(k-1,3)+1.2*Math.pow(k-1,2):1; const xz=0.35+0.65*e; _s.x*=xz; _s.z*=xz; _s.y*=0.6+0.4*easeOut(k); return; }
-  const a=Math.min(1,k/0.62), b=k>0.62?(k-0.62)/0.38:0; _p.y+=0.32*(1-easeOut(a)); const sq=b>0?Math.sin(b*Math.PI)*0.16:0; _s.y*=1-sq; _s.x*=1+sq*0.35; _s.z*=1+sq*0.35; }
-function settleCells(list){ if(reduceMotion||!list.length) return; const now=performance.now(); for(const i of list){ settle.set(i,now); texHold.add(i); texCell(i); dirtyChunks.add(chunkOf(i)); } cellTexDirty=true; needRender=true; }
+  const c1=1.9, c3=c1+1, e=1+c3*Math.pow(k-1,3)+c1*Math.pow(k-1,2), s=0.62+0.38*e; _s.x*=s; _s.z*=s; _s.y*=0.75+0.25*e; }
+function settleCells(list){ if(reduceMotion||!list.length) return; const now=performance.now(); for(const i of list){ settle.set(i,now); dirtyChunks.add(chunkOf(i)); } needRender=true; }
 function tickSettle(now){ let fin=false; const land=SETTLE_MS*(cur.type==="cross"?0.3:0.6); settle.forEach((t0,i)=>{ const a=now-t0; if(a>=land&&texHold.delete(i)){ texCell(i); cellTexDirty=true; } if(a>=SETTLE_MS){ settle.delete(i); fin=true; } dirtyChunks.add(chunkOf(i)); }); if(fin) shadowDirty=true; needRender=true; }
 function disposeChunks(){ settle.clear(); texHold.clear(); chunks.forEach(o=>{ [o.A,o.B].forEach(M=>{ scene.remove(M); M.dispose(); }); }); chunks.clear(); dirtyChunks.clear(); }
 function buildAllChunks(){ disposeChunks(); const has=new Set(); for(let i=0;i<cur.cells.length;i++) if(cur.cells[i]>=0) has.add(chunkOf(i)); has.forEach(k=>rebuildChunk(k)); ghostGeo(); }
 function restyleChunks(){ chunks.forEach(o=>{ o.A.geometry=geoFor(cur.type,shapeOf(cur),true); o.B.geometry=geoFor(cur.type,shapeOf(cur),false); o.A.material=o.B.material=matFor(cur.type,shapeOf(cur)); }); chunks.forEach((o,k)=>rebuildChunk(k)); U.uCross.value=cur.type==="cross"?1:0; ghostGeo(); shadowDirty=true; needRender=true; }
-function flushChunks(){ dirtyChunks.forEach(k=>rebuildChunk(k)); dirtyChunks.clear(); if(!stroke) shadowDirty=true; }
+let lastEditT=0;
+function flushChunks(){ dirtyChunks.forEach(k=>rebuildChunk(k)); dirtyChunks.clear(); shadowDirty=true; lastEditT=performance.now(); }
 const _wp=new THREE.Vector3();
 function updateLOD(){ const th=Math.tan(camera.fov*Math.PI/360); chunks.forEach(o=>{ const d=Math.max(0.5,camera.position.distanceTo(o.center)-CH*0.5); const px=H_px/(2*d*th); const hi=px>=(cur.type==="cross"?18:9); o.A.visible=hi&&o.A.count>0; o.B.visible=!hi&&o.B.count>0; }); }
 
@@ -2289,16 +2291,19 @@ function cellScreen(i){ const c=i%W, r=(i-c)/W; const v=new THREE.Vector3(c-W/2+
 /* цикл: рисуем только когда что-то изменилось */
 let visT=0, W_px=1,H_px=1, needRender=true, shadowDirty=true, lastShadow=0;
 let previewOn=false; // 3D-превью готовой работы на странице схемы — тот же стол и те же детали, только смотреть
-function resize(){ if(ws.hidden&&!previewOn) return; const r=(previewOn?$("mdViewer"):ws).getBoundingClientRect(); W_px=Math.max(1,Math.round(r.width)); H_px=Math.max(1,Math.round(r.height)); dpr=Math.min(window.devicePixelRatio||1,2); renderer.setPixelRatio(dpr); renderer.setSize(W_px,H_px,false); camera.aspect=W_px/H_px; camera.updateProjectionMatrix(); needRender=true; insDirty=true; insApplyPos(); }
+let dprLive=0, moveT=0;
+function setLiveDpr(d){ if(Math.abs(d-dprLive)<0.01) return; dprLive=d; renderer.setPixelRatio(d); renderer.setSize(W_px,H_px,false); needRender=true; }
+function resize(){ if(ws.hidden&&!previewOn) return; const r=(previewOn?$("mdViewer"):ws).getBoundingClientRect(); W_px=Math.max(1,Math.round(r.width)); H_px=Math.max(1,Math.round(r.height)); dpr=Math.min(window.devicePixelRatio||1,2); dprLive=dpr; renderer.setPixelRatio(dpr); renderer.setSize(W_px,H_px,false); camera.aspect=W_px/H_px; camera.updateProjectionMatrix(); needRender=true; insDirty=true; insApplyPos(); }
 new ResizeObserver(resize).observe(ws); new ResizeObserver(()=>{ if(previewOn) resize(); }).observe($("mdViewer"));
 function frame(now){ requestAnimationFrame(frame); if((ws.hidden&&!previewOn)||!cur) return;
   // холст всегда во всё окно: если размер окна поменялся незаметно для наблюдателя — подгоняем
   if(canvas.clientWidth&&(Math.abs(canvas.clientWidth-W_px)>1||Math.abs(canvas.clientHeight-H_px)>1)) resize();
-  const mv=updateCamera(); if(dirtyChunks.size){ flushChunks(); needRender=true; } if(cellTexDirty){ cellTex.needsUpdate=true; cellTexDirty=false; needRender=true; }
+  const mv=updateCamera();
+  if(mv){ moveT=now; if(dpr>1.3) setLiveDpr(Math.max(1,dpr*0.62)); } else if(dprLive!==dpr&&now-moveT>220) setLiveDpr(dpr); if(dirtyChunks.size){ flushChunks(); needRender=true; } if(cellTexDirty){ cellTex.needsUpdate=true; cellTexDirty=false; needRender=true; }
   if(hintOn&&sel&&isChart()){ U.uTime.value=now/1000; needRender=true; } if(settle.size) tickSettle(now); if(G.anim){ tickGhost(now); needRender=true; } else if(ghost&&ghost.visible&&!outer&&!(gest&&gest.kind==="stamp"&&ptrs.size>0)&&now-G.t>700){ if(gest&&gest.kind==="stamp") gest=null; hideGhost(); }
   if(mv||needRender){ const th=Math.tan(camera.fov*Math.PI/360); U.uPx.value=H_px/(2*camera.position.distanceTo(cam.t)*th); updateLOD();
     if(selCell>=0){ const c=selCell%W, r=(selCell-c)/W; selRing.position.set(c-W/2+0.5,0.03,r-H/2+0.5); selRing.visible=true; } else selRing.visible=false;
-    if(shadowDirty&&!settle.size&&now-lastShadow>110){ renderer.shadowMap.needsUpdate=true; shadowDirty=false; lastShadow=now; }
+    if(shadowDirty&&!settle.size&&!stroke&&now-lastEditT>280&&now-lastShadow>110){ renderer.shadowMap.needsUpdate=true; shadowDirty=false; lastShadow=now; }
     renderer.render(scene,camera); needRender=shadowDirty; if(mv){ insDirty=true; visT=now; } }
   if(visT&&now-visT>260){ visT=0; if(!previewOn) visSync(); }
   else if(shadowDirty) needRender=true;
@@ -2336,7 +2341,7 @@ function footprint(center){ if(center<0||!cur||!sel) return []; let w=tool.w, h=
   return out; }
 function commitCells(list,sound){ if(!list.length) return false; const to=palIdx(sel); beginStroke(); const put=[]; for(const i of list) if(cur.cells[i]<0&&setCell(i,to)) put.push(i); endStroke(); settleCells(put);
   // звук — в момент, когда деталь садится на место
-  if(put.length&&sound!==false) setTimeout(()=>playClick("place"),reduceMotion||cur.type==="cross"?20:SETTLE_MS*0.6); updateCountsUI(); return put.length>0; }
+  if(put.length&&sound!==false) setTimeout(()=>playClick("place"),20); updateCountsUI(); return put.length>0; }
 let lastSnd=0, eraseOn=false;
 // ластик: убирает поставленное под отпечатком текущей насадки
 function eraseFoot(center){ let w=tool.w, h=tool.h; if(toolRot&&w!==h){ const t=w; w=h; h=t; } const c0=center%W, r0=(center-c0)/W, sx=-Math.floor((w-1)/2), sy=-Math.floor((h-1)/2), out=[];
@@ -2374,7 +2379,7 @@ canvas.addEventListener("pointerdown",e=>{ if(!cur) return; const p=posOf(e); if
   selCell=-1; hideEdit();
   if(dragMode==="stamp"&&isChart()&&fitChart&&!footprint(i).length){ toast("Здесь по схеме другой цвет. Откройте замок в руке, чтобы ставить куда угодно"); gest={kind:"orbit",x:p.x,y:p.y,moved:false,cell:-1}; return; }
   // палец: деталь появляется через мгновение — если следом коснулся второй палец, это жест стола, и ничего не мелькает
-  if(!mouse){ gest={kind:"pend",x:p.x,y:p.y,cell:i}; const g0=gest; clearTimeout(pendT); pendT=setTimeout(()=>{ if(gest===g0&&ptrs.size===1) startPut(g0); },120); return; }
+  if(!mouse){ gest={kind:"pend",x:p.x,y:p.y,cell:i}; const g0=gest; clearTimeout(pendT); pendT=setTimeout(()=>{ if(gest===g0&&ptrs.size===1) startPut(g0); },70); return; }
   startPut({x:p.x,y:p.y,cell:i}); });
 let pendT=0;
 function startPut(g){ const i=g.cell; clearTimeout(pendT);
