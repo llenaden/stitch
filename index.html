@@ -1093,7 +1093,7 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 }
 @media (min-width:601px) and (max-width:860px){ #ws.lib-open .hand,#ws.side-l.lib-open .hand{left:8px;right:8px;max-width:calc(100% - 16px)} }
 .rug-row{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.rug-o{appearance:none;aspect-ratio:2/3;border-radius:8px;border:1px solid var(--line-2);background:#f4f1ea center/cover no-repeat;image-rendering:pixelated;cursor:pointer;padding:0}
+.rug-o{appearance:none;aspect-ratio:6/7;border-radius:8px;border:1px solid var(--line-2);background:#f4f1ea center/cover no-repeat;image-rendering:pixelated;cursor:pointer;padding:0}
 .rug-o.on{outline:2px solid var(--ink);outline-offset:2px}
 .rug-o.none{background:var(--surface-2);display:grid;place-items:center;font-size:11px;font-weight:600;color:var(--muted);image-rendering:auto;text-align:center;line-height:1.2;padding:4px}
 .hb.icon{width:44px;padding:0}
@@ -1231,7 +1231,7 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 
 <!-- ГЛАВНАЯ -->
 <section class="scr" id="scrHome" hidden>
-  <header class="topbar"><span class="wordmark"><i class="logo" aria-hidden="true"></i>MyStitch<small class="ver">версия 21</small></span><span class="grow"></span>
+  <header class="topbar"><span class="wordmark"><i class="logo" aria-hidden="true"></i>MyStitch<small class="ver">версия 22</small></span><span class="grow"></span>
     <div class="hnav"><div class="hseg" role="tablist" aria-label="Раздел"><button role="tab" id="hsModels" aria-selected="true"><span class="lg">Готовые схемы</span><span class="sh">Схемы</span></button><button role="tab" id="hsOwn" aria-selected="false"><span class="lg">Самостоятельная вышивка</span><span class="sh">Своя</span></button></div><button class="hprof acct-open" id="hProfile" aria-label="Персонализация и память" title="Персонализация и память"><svg class="ic"><use href="#i-user"/></svg></button></div>
     <span class="grow"></span>
     <button class="pill tb-load" id="tbLoad" tabindex="-1"><svg class="ic"><use href="#i-image"/></svg><span>Загрузить картинку</span></button></header>
@@ -1615,9 +1615,8 @@ const SOUNDS=[
   {id:"wood",name:"Дерево",d:"тёплый деревянный стук"},
   {id:"drop",name:"Капля",d:"нежная капля с отзвуком"},
   {id:"needle",name:"Иголка",d:"шёлковый шорох нити и мягкий прокол"},
-  {id:"own",name:"Свой звук",d:"короткий файл с вашего устройства"},
   {id:"off",name:"Без звука",d:""}];
-let sndKind=(()=>{ const v=ls.get("mystitch.snd"); return v&&SOUNDS.some(s=>s.id===v)?v:"gem"; })();
+let sndKind=(()=>{ const v=ls.get("mystitch.snd"); return v&&v!=="own"&&SOUNDS.some(s=>s.id===v)?v:"gem"; })();
 let sndVol=(()=>{ const v=parseFloat(ls.get("mystitch.sndv")); return isFinite(v)?clamp(v,0,1):0.7; })();
 let clickOn=sndKind!=="off", _ac=null, _nb=null, _ownBuf=null, _ownLoading=false;
 function sndCtx(){ if(!_ac){ const A=window.AudioContext||window.webkitAudioContext; if(!A) return null; _ac=new A(); sndBus(); } if(_ac.state==="suspended") _ac.resume(); return _ac; }
@@ -1674,7 +1673,6 @@ function renderSoundPicker(box){ if(!box) return; box.innerHTML="";
   const v=document.createElement("label"); v.className="snd-vol"; v.innerHTML='<span>Громкость</span><input type="range" min="0" max="100" step="5">'; const r=v.querySelector("input"); r.value=Math.round(sndVol*100);
   r.addEventListener("input",()=>{ sndVol=r.value/100; ls.set("mystitch.sndv",String(sndVol)); document.querySelectorAll(".snd-vol input").forEach(x=>{ if(x!==r) x.value=r.value; }); });
   r.addEventListener("change",()=>playClick("place")); r.addEventListener("click",e=>e.stopPropagation()); box.appendChild(v);
-  const own=document.createElement("button"); own.type="button"; own.className="snd-own"; own.textContent="Загрузить свой звук…"; own.addEventListener("click",e=>{ e.stopPropagation(); $("sndFile").click(); }); box.appendChild(own);
   soundUISync(); }
 function soundUISync(){ document.querySelectorAll(".snd-o").forEach(b=>b.setAttribute("aria-checked",String(b.dataset.s===sndKind))); document.querySelectorAll(".snd-vol").forEach(v=>v.classList.toggle("dim",!clickOn));
   const d=(SOUNDS.find(s=>s.id===sndKind)||{}).d; document.querySelectorAll(".snd-desc").forEach(x=>x.textContent=clickOn?(d?"Сейчас: "+d:""):"Звук выключен"); }
@@ -2024,7 +2022,19 @@ const RUGS=[
  {id:"rug-star",n:"красный со звездой",d:"star",pal:{red:"#d22b1c",dred:"#9c1b14",cream:"#f6efe1",orange:"#ef7a1a",black:"#1c1b1d",blue:"#5b8fd1",white:"#fbfaf7"}},
  {id:"rug-star-teal",n:"бирюзовый со звездой",d:"star",pal:{red:"#1f8f8a",dred:"#145e5c",cream:"#f4efe2",orange:"#e2a34a",black:"#1b2326",blue:"#c4523e",white:"#fbfaf7"}},
  {id:"rug-frames",n:"зелёно-красный",d:"frames",pal:{green:"#1f6b3a",dgreen:"#144a28",red:"#cf2a26",cream:"#f3e6c6",gold:"#b9852f"}},
- {id:"rug-sun",n:"солнечный жёлтый",d:"sun",pal:{yellow:"#f5b51d",orange:"#ee7d17",cream:"#f8efd6",green:"#86a85a",dgreen:"#4f7a3a",red:"#d8452a"}}];
+ {id:"rug-sun",n:"солнечный жёлтый",d:"sun",pal:{yellow:"#f5b51d",orange:"#ee7d17",cream:"#f8efd6",green:"#86a85a",dgreen:"#4f7a3a",red:"#d8452a"}},
+ // советский ковёр на стену: ромб-медальон, угловые четверти, широкая кайма с розетками
+ {id:"rug-ussr",n:"советский бордовый",d:"russ",pal:{red:"#a8231d",dred:"#6f1612",gold:"#d9a441",border:"#24365c",cream:"#efe2c4",dark:"#2a1512",dark2:"#7a2e1f"}},
+ {id:"rug-ussr-blue",n:"советский синий",d:"russ",pal:{red:"#2c4a7a",dred:"#1c2f50",gold:"#d8b25a",border:"#8c2a2a",cream:"#efe6d2",dark:"#151d2c",dark2:"#5a3b2a"}},
+ {id:"rug-ussr-brown",n:"советский коричневый",d:"russ",pal:{red:"#8a5a35",dred:"#5e3a22",gold:"#e6c27a",border:"#2f4a3a",cream:"#f1e4c9",dark:"#2b1d14",dark2:"#9a3b2a"}},
+ // персидский: фестончатый медальон, угловые «спандрели», цветочное поле
+ {id:"rug-pers",n:"персидский красный",d:"pers",pal:{red:"#9e1b22",navy:"#1d2b55",ivory:"#efe4cc",gold:"#d4a23c",green:"#4f7a52",blue:"#5a86b8",dark:"#141a33"}},
+ {id:"rug-pers-navy",n:"персидский синий",d:"pers",pal:{red:"#1c2a5a",navy:"#8f1d24",ivory:"#efe6d4",gold:"#d6a94a",green:"#5c8a5e",blue:"#c45a4a",dark:"#10162e"}},
+ {id:"rug-pers-cream",n:"персидский светлый",d:"pers",pal:{red:"#e6d6b6",navy:"#7a2a2e",ivory:"#faf3e2",gold:"#c2913a",green:"#6e8f6a",blue:"#6a8cb0",dark:"#4a2a22"}},
+ // турецкий килим: ступенчатые ромбы-гёли в колонну, кайма-зигзаг
+ {id:"rug-kilim",n:"килим красный",d:"kilim",pal:{bg:"#b5302a",bg2:"#7a1f1d",accent:"#e88a2c",light:"#f1e1c0",dark:"#22233a"}},
+ {id:"rug-kilim-sand",n:"килим песочный",d:"kilim",pal:{bg:"#d9b98a",bg2:"#b5876a",accent:"#a8442f",light:"#f6ecd8",dark:"#3a2e2a"}},
+ {id:"rug-kilim-indigo",n:"килим индиго",d:"kilim",pal:{bg:"#28406a",bg2:"#1b2b4a",accent:"#d2a03a",light:"#efe4cc",dark:"#121624"}}];
 const RUG_W=168, RUG_H=196, RUG_M=5; // стежков; RUG_M — поля чистой канвы вокруг
 function rugCell(R,x,y){ const P=R.pal, W=RUG_W-2*RUG_M, H=RUG_H-2*RUG_M; x-=RUG_M; y-=RUG_M; if(x<0||y<0||x>=W||y>=H) return null;
   const e=Math.min(x,y,W-1-x,H-1-y), cx=(W-1)/2, cy=(H-1)/2, dx=Math.abs(x-cx), dy=Math.abs(y-cy), along=(x===e||W-1-x===e)?y:x, hsh=((x*73856093)^(y*19349663))>>>0;
@@ -2041,9 +2051,9 @@ function rugCell(R,x,y){ const P=R.pal, W=RUG_W-2*RUG_M, H=RUG_H-2*RUG_M; x-=RUG
     if(e===10) return (x+y)%2?P.black:P.white; if(e===11) return P.orange;
     const fx=x-12, fy=y-12, fw=W-24, fh=H-24, cxx=Math.min(fx,fw-1-fx), cyy=Math.min(fy,fh-1-fy);
     if(cxx+cyy<12){ if(cxx+cyy===11) return P.black; return (cxx+cyy)%3===0?P.red:P.white; }
-    const d=dx+dy*0.8;
-    if(d<=2) return P.red; if(d<=4) return P.white; if(d<=6) return P.black; if(dx<=1.5&&dy<=15||dy<=1.5&&dx<=13) return (dx+dy)%2<1?P.black:P.white; if(d<=8.5) return P.white; if(d<=10) return P.black;
-    if(d<=11.5&&(Math.round(dx)%3===0)) return P.white;
+    const kx=W/80, dx2=dx/kx, dy2=dy/kx, d=dx2+dy2*0.8;
+    if(d<=2) return P.red; if(d<=4) return P.white; if(d<=6) return P.black; if(dx2<=1.5&&dy2<=15||dy2<=1.5&&dx2<=13) return (dx2+dy2)%2<1?P.black:P.white; if(d<=8.5) return P.white; if(d<=10) return P.black;
+    if(d<=11.5&&(Math.round(dx2)%3===0)) return P.white;
     if(hsh%29===0) return P.dred; if(hsh%43===0) return P.black; if(hsh%71===0) return P.blue; return P.red; }
   if(R.d==="frames"){ const band=[P.green,P.green,P.cream,P.cream,P.red,P.red,P.cream,P.green,P.green,P.dgreen,P.cream,P.red,P.red,P.cream]; if(e<band.length){ if(band[e]===P.cream&&(e===2||e===3)&&along%3===1) return P.red; if(e===9&&along%5===2) return P.gold; return band[e]; }
     const fx=x-14, fy=y-14, fw=W-28, fh=H-28; const m=Math.abs(fx-(fw-1)/2)/(fw/2)+Math.abs(fy-(fh-1)/2)/(fh/2);
@@ -2052,9 +2062,55 @@ function rugCell(R,x,y){ const P=R.pal, W=RUG_W-2*RUG_M, H=RUG_H-2*RUG_M; x-=RUG
   if(R.d==="sun"){ if(e<=2) return P.orange; if(e<=8){ const k=along%7, t=e-3; if(t===2&&(k===3)) return P.dgreen; if((t===1||t===3)&&k===3||t===2&&(k===2||k===4)) return P.green; if(t===2&&k===0) return P.red; return P.cream; } if(e===9) return P.orange; if(e===10) return P.cream;
     const fx=x-11, fy=y-11, fw=W-22, fh=H-22, cxx=Math.min(fx,fw-1-fx), cyy=Math.min(fy,fh-1-fy);
     if(cxx+cyy<14){ if(cxx+cyy===13) return P.orange; return (cxx*cyy)%5===2?P.green:P.cream; }
-    const d=dx+dy*0.85;
-    if(d<=2) return P.red; if(d<=4) return P.cream; if(d<=6.5) return P.green; if(d<=8) return P.cream; if(dx<=1&&dy<=16||dy<=1&&dx<=14) return P.cream; if(d<=12&&(Math.round(dx+dy)%2===0)) return P.dgreen; if(d<=13) return P.cream;
+    const kx=W/80, dx2=dx/kx, dy2=dy/kx, d=dx2+dy2*0.85;
+    if(d<=2) return P.red; if(d<=4) return P.cream; if(d<=6.5) return P.green; if(d<=8) return P.cream; if(dx2<=1&&dy2<=16||dy2<=1&&dx2<=14) return P.cream; if(d<=12&&(Math.round(dx2+dy2)%2===0)) return P.dgreen; if(d<=13) return P.cream;
     if(hsh%9===0) return P.orange; if(hsh%41===0) return P.red; return P.yellow; }
+  if(R.d==="russ"){
+    if(e<=1) return P.dark; if(e===2) return P.cream;
+    if(e<=15){ const t=e-3, a=along%16, m=Math.abs(a-8)+Math.abs(t-6);
+      if(m<=1) return P.gold; if(m<=3) return P.red; if(m===4) return P.cream; if(m===5) return P.dark;
+      if((a<=1||a>=15)&&(t===3||t===9)) return P.gold; if(a===0&&t===6) return P.cream; return P.border; }
+    if(e===16) return P.cream; if(e===17) return P.dark;
+    if(e<=21){ const t=e-18, a=along%6; return Math.abs(a-3)===t?P.cream:P.dark2; }
+    if(e===22) return P.dark; if(e===23) return P.cream;
+    const fx=x-24, fy=y-24, fw=W-48, fh=H-48, cxx=Math.min(fx,fw-1-fx), cyy=Math.min(fy,fh-1-fy);
+    const ms=(Math.floor(dx/2)*2)/(fw*0.34)+(Math.floor(dy/2)*2)/(fh*0.40);
+    if(ms<1){ if(ms>0.94) return P.dark; if(ms>0.88) return P.cream; if(ms>0.81) return P.dark2;
+      if(ms>0.62) return (Math.round(dx)+Math.round(dy))%6===0?P.gold:((Math.round(dx)+Math.round(dy))%6===3?P.cream:P.border);
+      if(ms>0.56) return P.cream; if(ms>0.30) return (Math.round(dx)%5===0&&Math.round(dy)%5===0)?P.gold:P.red;
+      if(ms>0.25) return P.dark; if(ms>0.13) return P.gold; if(dx<=1||dy<=1) return P.dark; return P.cream; }
+    const py=Math.abs(dy-(fh*0.40+7)); if(py+dx*1.3<6) return py+dx*1.3<3?P.gold:P.dark;
+    const cm=cxx+cyy; if(cm<30){ if(cm>=28) return P.dark; if(cm>=26) return P.cream; if(cm>=16) return (cxx%4===0||cyy%4===0)?P.gold:P.border; if(cm>=14) return P.cream; return P.dark2; }
+    const lx=((fx%12)+12)%12, ly=((fy%12)+12)%12, lm=Math.abs(lx-6)+Math.abs(ly-6);
+    if(lm===5) return P.dred; if(lm<=1) return P.gold; return P.red; }
+  if(R.d==="pers"){
+    const guard=t=>((along+t)%4<2)?P.ivory:P.red;
+    if(e<=1) return P.dark; if(e<=3) return guard(e); if(e===4) return P.dark;
+    if(e<=17){ const t=e-5, a=along%18, rr=Math.hypot(a-9,(t-6)*1.1);
+      if(rr<1.6) return P.gold; if(rr<3.2) return P.red; if(rr<4.4) return P.ivory;
+      if((t===0||t===12)&&a%3===0) return P.ivory; if(Math.abs(((a+t*1.5)%18)-9)<0.8) return P.green; return P.navy; }
+    if(e===18) return P.dark; if(e<=20) return guard(e); if(e===21) return P.dark;
+    const fx=x-22, fy=y-22, fw=W-44, fh=H-44, cxx=Math.min(fx,fw-1-fx), cyy=Math.min(fy,fh-1-fy);
+    const th=Math.atan2(dy,dx), rr=Math.hypot(dx/(fw*0.30),dy/(fh*0.34))*(1-0.10*Math.cos(8*th));
+    if(rr<1){ if(rr>0.93) return P.ivory; if(rr>0.86) return P.dark;
+      if(rr>0.55){ const q=((Math.round(dx)%6)+(Math.round(dy)%6)); return q===0?P.gold:(q===6?P.ivory:(hsh%23===0?P.green:P.navy)); }
+      if(rr>0.49) return P.ivory; if(rr>0.24) return (Math.round(dx)%4===0&&Math.round(dy)%4===0)?P.gold:P.red; if(rr>0.18) return P.ivory; if(dx+dy<=1) return P.red; return P.gold; }
+    const pd=Math.abs(dy-fh*0.34-5); if(pd+dx*1.5<5) return pd+dx*1.5<2.5?P.gold:P.navy;
+    const sr=Math.hypot(cxx/(fw*0.30),cyy/(fh*0.24));
+    if(sr<1){ if(sr>0.93) return P.ivory; if(sr>0.86) return P.dark; if((cxx+cyy)%7===0&&sr<0.8) return P.gold; if(hsh%19===0) return P.ivory; return P.navy; }
+    const off=(((Math.floor(fx/10))%2)+2)%2*5, lx=((fx%10)+10)%10, ly=(((fy+off)%10)+10)%10, fm=Math.abs(lx-5)+Math.abs(ly-5);
+    if(fm===0) return P.gold; if(fm===1) return P.ivory; if(fm===2&&(lx===5||ly===5)) return P.blue; if(hsh%47===0) return P.green; return P.red; }
+  if(R.d==="kilim"){
+    if(e<=1) return P.dark;
+    if(e<=8){ const t=e-2, z=Math.abs(along%10-5); if(t<=6-z&&t>=5-z) return P.light; if(t<5-z) return P.accent; return P.bg2; }
+    if(e===9) return P.dark; if(e===10) return P.light; if(e===11) return P.dark;
+    const fx=x-12, fy=y-12, fw=W-24, fh=H-24, segH=fh/3, k=Math.min(2,Math.max(0,Math.floor(fy/segH))), cyl=fy-(k+0.5)*segH, cxl=fx-(fw-1)/2;
+    const ax=Math.abs(cxl), ay=Math.abs(cyl), s=(Math.floor(ax/2)*2)/(fw*0.34)+(Math.floor(ay/2)*2)/(segH*0.44);
+    if(s<1){ const ring=Math.floor(s*6); if(ring>=5) return P.dark; return [k===1?P.accent:P.light,P.dark,P.accent,P.light,P.bg2][ring]; }
+    if(s<1.14&&(Math.floor(ax)+Math.floor(ay))%4<2) return P.dark;
+    const sx=ax-fw*0.42, sm=Math.abs(((fy%12)+12)%12-6)+Math.abs(sx);
+    if(Math.abs(sx)<5&&sm<5) return sm<2?P.light:(sm<3?P.dark:P.accent);
+    if(((fy%24)+24)%24===0) return P.bg2; return P.bg; }
   return P.red; }
 function crossCell(g,x,y,s,hex){ const p=s*0.1, lw=s*0.42; g.lineCap="round";
   const arm=(x0,y0,x1,y1,top)=>{ g.lineWidth=lw; g.strokeStyle=shade(hex,top?0:-0.22); g.beginPath(); g.moveTo(x0,y0); g.lineTo(x1,y1); g.stroke();
@@ -2242,7 +2298,7 @@ function frame(now){ requestAnimationFrame(frame); if((ws.hidden&&!previewOn)||!
   if(hintOn&&sel&&isChart()){ U.uTime.value=now/1000; needRender=true; } if(settle.size) tickSettle(now); if(G.anim){ tickGhost(now); needRender=true; } else if(ghost&&ghost.visible&&!outer&&!(gest&&gest.kind==="stamp"&&ptrs.size>0)&&now-G.t>700){ if(gest&&gest.kind==="stamp") gest=null; hideGhost(); }
   if(mv||needRender){ const th=Math.tan(camera.fov*Math.PI/360); U.uPx.value=H_px/(2*camera.position.distanceTo(cam.t)*th); updateLOD();
     if(selCell>=0){ const c=selCell%W, r=(selCell-c)/W; selRing.position.set(c-W/2+0.5,0.03,r-H/2+0.5); selRing.visible=true; } else selRing.visible=false;
-    if(shadowDirty&&now-lastShadow>110){ renderer.shadowMap.needsUpdate=true; shadowDirty=false; lastShadow=now; }
+    if(shadowDirty&&!settle.size&&now-lastShadow>110){ renderer.shadowMap.needsUpdate=true; shadowDirty=false; lastShadow=now; }
     renderer.render(scene,camera); needRender=shadowDirty; if(mv){ insDirty=true; visT=now; } }
   if(visT&&now-visT>260){ visT=0; if(!previewOn) visSync(); }
   else if(shadowDirty) needRender=true;
@@ -2503,7 +2559,7 @@ document.querySelectorAll("#spNeat button").forEach(b=>b.addEventListener("click
 function tableRow(box){ box.innerHTML=""; const curT=tableOf(ls.get("mystitch.table")).id;
   TABLES.forEach(t=>{ const b=document.createElement("button"); b.className="sw-btn"+(t.id===curT?" on":""); b.style.background=tableCss(t); b.title="Фон: "+t.n; b.setAttribute("aria-label","Цвет стола: "+t.n); b.addEventListener("click",()=>{ ls.set("mystitch.table",t.id); applyTable(); tableRow(box); toast("Стол: "+t.n); }); box.appendChild(b); }); }
 function rugRow(box){ box.innerHTML=""; const curR=ls.get("mystitch.rug")||"";
-  const none=document.createElement("button"); none.className="rug-o none"+(curR?"":" on"); none.innerHTML="<span>Без ковра</span>"; none.addEventListener("click",()=>{ ls.del("mystitch.rug"); applyRug(); rugRow(box); }); box.appendChild(none);
+  const none=document.createElement("button"); none.className="rug-o none"+(curR?"":" on"); none.innerHTML="<span>Без<br>ковра</span>"; none.addEventListener("click",()=>{ ls.del("mystitch.rug"); applyRug(); rugRow(box); }); box.appendChild(none);
   RUGS.forEach(R=>{ const b=document.createElement("button"); b.className="rug-o"+(R.id===curR?" on":""); b.style.backgroundImage="url("+rugPreview(R)+")"; b.title="Ковёр: "+R.n; b.setAttribute("aria-label","Ковёр: "+R.n); b.addEventListener("click",()=>{ ls.set("mystitch.rug",R.id); applyRug(); rugRow(box); toast("Ковёр: "+R.n); }); box.appendChild(b); }); }
 
 /* ---------- Правка поставленной детали ---------- */
