@@ -1231,7 +1231,7 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 
 <!-- ГЛАВНАЯ -->
 <section class="scr" id="scrHome" hidden>
-  <header class="topbar"><span class="wordmark"><i class="logo" aria-hidden="true"></i>MyStitch<small class="ver">версия 20</small></span><span class="grow"></span>
+  <header class="topbar"><span class="wordmark"><i class="logo" aria-hidden="true"></i>MyStitch<small class="ver">версия 21</small></span><span class="grow"></span>
     <div class="hnav"><div class="hseg" role="tablist" aria-label="Раздел"><button role="tab" id="hsModels" aria-selected="true"><span class="lg">Готовые схемы</span><span class="sh">Схемы</span></button><button role="tab" id="hsOwn" aria-selected="false"><span class="lg">Самостоятельная вышивка</span><span class="sh">Своя</span></button></div><button class="hprof acct-open" id="hProfile" aria-label="Персонализация и память" title="Персонализация и память"><svg class="ic"><use href="#i-user"/></svg></button></div>
     <span class="grow"></span>
     <button class="pill tb-load" id="tbLoad" tabindex="-1"><svg class="ic"><use href="#i-image"/></svg><span>Загрузить картинку</span></button></header>
@@ -1609,44 +1609,61 @@ const b64ToI16=s=>{ const bin=atob(s), u=new Uint8Array(bin.length); for(let i=0
 
 /* ---------- Звук: тот же движок, что в MyBlocks ---------- */
 const SOUNDS=[
-  {id:"gem",name:"Стразинка",d:"стеклянный «тик» — стразинка села на клей"},
-  {id:"brick",name:"Щелчок",d:"сухой пластиковый щелчок"},
+  {id:"gem",name:"Стразинка",d:"мягкое касание и чистый стеклянный «дзинь»"},
+  {id:"brick",name:"Щелчок",d:"аккуратный приглушённый щелчок"},
   {id:"soft",name:"Мягкий",d:"негромкий округлый «пум»"},
   {id:"wood",name:"Дерево",d:"тёплый деревянный стук"},
-  {id:"drop",name:"Капля",d:"короткая весёлая капелька"},
-  {id:"needle",name:"Иголка",d:"шорох нити и лёгкий укол"},
+  {id:"drop",name:"Капля",d:"нежная капля с отзвуком"},
+  {id:"needle",name:"Иголка",d:"шёлковый шорох нити и мягкий прокол"},
   {id:"own",name:"Свой звук",d:"короткий файл с вашего устройства"},
   {id:"off",name:"Без звука",d:""}];
 let sndKind=(()=>{ const v=ls.get("mystitch.snd"); return v&&SOUNDS.some(s=>s.id===v)?v:"gem"; })();
 let sndVol=(()=>{ const v=parseFloat(ls.get("mystitch.sndv")); return isFinite(v)?clamp(v,0,1):0.7; })();
 let clickOn=sndKind!=="off", _ac=null, _nb=null, _ownBuf=null, _ownLoading=false;
-function sndCtx(){ if(!_ac){ const A=window.AudioContext||window.webkitAudioContext; if(!A) return null; _ac=new A(); } if(_ac.state==="suspended") _ac.resume(); return _ac; }
+function sndCtx(){ if(!_ac){ const A=window.AudioContext||window.webkitAudioContext; if(!A) return null; _ac=new A(); sndBus(); } if(_ac.state==="suspended") _ac.resume(); return _ac; }
+/* звуковой тракт: мягкий фильтр сверху, лёгкий компрессор и короткий «комнатный» отзвук — звук не режет ухо и звучит дорого */
+let _dry=null, _wet=null;
+function sndBus(){ const a=_ac; const comp=a.createDynamicsCompressor(); comp.threshold.value=-20; comp.knee.value=18; comp.ratio.value=3; comp.attack.value=0.003; comp.release.value=0.2;
+  const tone=a.createBiquadFilter(); tone.type="lowpass"; tone.frequency.value=7800; tone.Q.value=0.5; tone.connect(comp); comp.connect(a.destination);
+  _dry=a.createGain(); _dry.gain.value=1; _dry.connect(tone);
+  try{ const len=Math.floor(a.sampleRate*0.7), ir=a.createBuffer(2,len,a.sampleRate); for(let ch=0;ch<2;ch++){ const d=ir.getChannelData(ch); for(let i=0;i<len;i++){ const t=i/len; d[i]=(Math.random()*2-1)*Math.pow(1-t,3.2)*(i<a.sampleRate*0.004?i/(a.sampleRate*0.004):1); } }
+    const cv=a.createConvolver(); cv.buffer=ir; const wl=a.createBiquadFilter(); wl.type="lowpass"; wl.frequency.value=4200; _wet=a.createGain(); _wet.gain.value=0.22; _wet.connect(cv); cv.connect(wl); wl.connect(tone); }catch(_){ _wet=null; } }
+function sndOut(node,wet){ node.connect(_dry); if(_wet&&wet) { const s=_ac.createGain(); s.gain.value=wet; node.connect(s); s.connect(_wet); } }
 function sndNoise(){ if(!_nb){ _nb=_ac.createBuffer(1,Math.floor(_ac.sampleRate*0.25),_ac.sampleRate); const d=_nb.getChannelData(0); for(let i=0;i<d.length;i++) d[i]=Math.random()*2-1; } return _nb; }
-function sndHit(t,{f=3000,q=1,type="bandpass",gain=0.08,dec=0.03,hp=0}){ const a=_ac, n=a.createBufferSource(); n.buffer=sndNoise(); let node=n;
+const jit=(v,k)=>v*(1+(Math.random()*2-1)*k); // каждая деталь звучит чуть по-своему — без механического повтора
+function sndHit(t,{f=3000,q=1,type="bandpass",gain=0.08,dec=0.03,hp=0,att=0.002,f2=0,wet=0.3}){ const a=_ac, n=a.createBufferSource(); n.buffer=sndNoise(); let node=n;
   if(hp){ const h=a.createBiquadFilter(); h.type="highpass"; h.frequency.value=hp; node.connect(h); node=h; }
-  const fl=a.createBiquadFilter(); fl.type=type; fl.frequency.value=f; fl.Q.value=q; node.connect(fl);
-  const g=a.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(gain*sndVol*1.6+1e-4,t+0.0015); g.gain.exponentialRampToValueAtTime(0.0001,t+dec); fl.connect(g); g.connect(a.destination); n.start(t,Math.random()*0.15); n.stop(t+dec+0.02); }
-function sndTone(t,{f=440,f2=0,type="sine",gain=0.06,att=0.003,dec=0.08}){ const a=_ac, o=a.createOscillator(), g=a.createGain(); o.type=type; o.frequency.setValueAtTime(f,t); if(f2) o.frequency.exponentialRampToValueAtTime(f2,t+dec*0.8);
-  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(gain*sndVol*1.6+1e-4,t+att); g.gain.exponentialRampToValueAtTime(0.0001,t+att+dec); o.connect(g); g.connect(a.destination); o.start(t); o.stop(t+att+dec+0.02); }
+  const fl=a.createBiquadFilter(); fl.type=type; fl.frequency.setValueAtTime(f,t); if(f2) fl.frequency.exponentialRampToValueAtTime(f2,t+dec); fl.Q.value=q; node.connect(fl);
+  const g=a.createGain(); g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(gain*sndVol*1.6+1e-4,t+att); g.gain.exponentialRampToValueAtTime(0.0001,t+att+dec); fl.connect(g); sndOut(g,wet); n.start(t,Math.random()*0.15); n.stop(t+att+dec+0.03); }
+function sndTone(t,{f=440,f2=0,type="sine",gain=0.06,att=0.003,dec=0.08,wet=0.35}){ const a=_ac, o=a.createOscillator(), g=a.createGain(); o.type=type; o.frequency.setValueAtTime(f,t); if(f2) o.frequency.exponentialRampToValueAtTime(f2,t+dec*0.8);
+  g.gain.setValueAtTime(0.0001,t); g.gain.exponentialRampToValueAtTime(gain*sndVol*1.6+1e-4,t+att); g.gain.exponentialRampToValueAtTime(0.0001,t+att+dec); o.connect(g); sndOut(g,wet); o.start(t); o.stop(t+att+dec+0.03); }
+// стеклянный колокольчик: негармоничные призвуки, как у настоящего кристалла
+function sndGlass(t,f,gain,dec){ [[1,1,1],[2.76,0.38,0.55],[5.40,0.16,0.3],[8.93,0.06,0.18]].forEach(([r,k,d])=>sndTone(t,{f:f*r,gain:gain*k,att:0.0015,dec:dec*d,wet:0.5})); }
 const SND={
-  gem(t,place){ if(!place){ sndHit(t,{f:5200,q:1.2,hp:2500,gain:0.04,dec:0.014}); return; }
-    sndHit(t,{f:4800,q:1.3,hp:2200,gain:0.06,dec:0.016}); sndTone(t,{f:3600,f2:2900,type:"triangle",gain:0.03,att:0.001,dec:0.05}); sndTone(t+0.004,{f:1900,f2:1500,gain:0.02,att:0.001,dec:0.04}); },
-  brick(t,place){ if(!place){ sndHit(t,{f:4200,q:0.9,hp:1800,gain:0.06,dec:0.018}); sndTone(t,{f:2400,gain:0.012,att:0.001,dec:0.012}); return; }
-    sndHit(t,{f:3600,q:0.9,hp:1500,gain:0.07,dec:0.016}); sndHit(t+0.019,{f:2600,q:1.1,hp:900,gain:0.1,dec:0.03}); sndTone(t+0.019,{f:240,f2:150,gain:0.07,att:0.003,dec:0.08}); },
-  soft(t,place){ if(!place){ sndTone(t,{f:760,f2:460,gain:0.05,att:0.002,dec:0.045}); return; }
-    sndTone(t,{f:520,f2:230,gain:0.09,att:0.003,dec:0.09}); sndTone(t,{f:1040,f2:460,type:"triangle",gain:0.015,att:0.002,dec:0.05}); sndHit(t,{f:900,q:0.7,type:"lowpass",gain:0.03,dec:0.03}); },
-  wood(t,place){ if(!place){ sndTone(t,{f:1320,gain:0.035,att:0.001,dec:0.04}); sndHit(t,{f:1500,q:5,gain:0.03,dec:0.02}); return; }
-    sndTone(t,{f:660,gain:0.07,att:0.001,dec:0.12}); sndTone(t,{f:1720,gain:0.015,att:0.001,dec:0.05}); sndHit(t,{f:1100,q:4,gain:0.05,dec:0.03}); },
-  drop(t,place){ if(!place){ sndTone(t,{f:900,f2:1500,gain:0.035,att:0.002,dec:0.04}); return; }
-    sndTone(t,{f:520,f2:1100,gain:0.07,att:0.002,dec:0.07}); sndTone(t+0.05,{f:180,f2:120,gain:0.04,att:0.003,dec:0.06}); },
-  needle(t,place){ if(!place){ sndHit(t,{f:2600,q:0.6,type:"bandpass",gain:0.03,dec:0.05}); return; }
-    sndHit(t,{f:1800,q:0.5,type:"bandpass",gain:0.05,dec:0.09}); sndHit(t+0.07,{f:6500,q:2,hp:4000,gain:0.035,dec:0.012}); },
+  // стразинка: мягкое касание клея и чистый негромкий «дзинь» стекла
+  gem(t,place){ const f=jit(2350,0.05); if(!place){ sndGlass(t,f*1.12,0.012,0.16); return; }
+    sndHit(t,{f:900,q:0.7,type:"lowpass",gain:0.035,dec:0.03,att:0.002,wet:0.05}); sndTone(t,{f:150,f2:110,gain:0.03,att:0.004,dec:0.05,wet:0}); sndGlass(t+0.006,f,0.022,0.32); },
+  // щелчок: аккуратный, приглушённый, без треска
+  brick(t,place){ const f=jit(1700,0.04); if(!place){ sndHit(t,{f:f*1.2,q:2.5,gain:0.025,dec:0.018,att:0.001,wet:0.1}); return; }
+    sndHit(t,{f,q:3,gain:0.04,dec:0.02,att:0.001,wet:0.1}); sndHit(t+0.016,{f:f*0.7,q:2,gain:0.045,dec:0.035,att:0.001,wet:0.15}); sndTone(t+0.016,{f:210,f2:150,gain:0.04,att:0.003,dec:0.06,wet:0.05}); },
+  // мягкий: округлый «пум», почти без верхов
+  soft(t,place){ const f=jit(440,0.04); if(!place){ sndTone(t,{f:f*1.4,f2:f,gain:0.035,att:0.004,dec:0.06}); return; }
+    sndTone(t,{f,f2:f*0.55,gain:0.07,att:0.005,dec:0.12}); sndTone(t,{f:f*2,f2:f*1.1,gain:0.012,att:0.004,dec:0.07}); },
+  // дерево: тёплая маримба
+  wood(t,place){ const f=jit(620,0.04); if(!place){ sndTone(t,{f:f*1.5,gain:0.025,att:0.002,dec:0.08}); return; }
+    sndTone(t,{f,gain:0.06,att:0.002,dec:0.22}); sndTone(t,{f:f*3.9,gain:0.012,att:0.001,dec:0.05}); sndHit(t,{f:f*1.6,q:6,gain:0.02,dec:0.025,att:0.001,wet:0.1}); },
+  // капля: нежная, с отзвуком
+  drop(t,place){ const f=jit(700,0.05); if(!place){ sndTone(t,{f:f*1.3,f2:f*2,gain:0.025,att:0.003,dec:0.06}); return; }
+    sndTone(t,{f,f2:f*1.9,gain:0.05,att:0.003,dec:0.11,wet:0.6}); },
+  // иголка: шёлковый шорох нити и мягкий прокол канвы
+  needle(t,place){ if(!place){ sndHit(t,{f:2200,f2:3200,q:0.8,gain:0.018,dec:0.06,att:0.01}); return; }
+    sndHit(t,{f:1400,f2:3000,q:0.9,gain:0.03,dec:0.11,att:0.02,wet:0.2}); sndHit(t+0.1,{f:900,q:1.2,type:"lowpass",gain:0.03,dec:0.03,att:0.002,wet:0.1}); sndTone(t+0.1,{f:jit(1900,0.04),gain:0.008,att:0.001,dec:0.08}); },
   own(t,place){ if(!_ownBuf){ loadOwnSound(); SND.gem(t,place); return; } const s=_ac.createBufferSource(), g=_ac.createGain(); s.buffer=_ownBuf; s.playbackRate.value=place?1:1.15; g.gain.value=(place?1:0.55)*sndVol; s.connect(g); g.connect(_ac.destination); s.start(t); s.stop(t+Math.min(1.2,_ownBuf.duration)); } };
 async function loadOwnSound(file){ if(_ownLoading&&!file) return false; _ownLoading=true; try{ const a=sndCtx(); if(!a) return false; let f=file||null;
     if(!f) f=await IDB.get("kv","snd:own"); if(!f) return false;
     const buf=await new Promise((res,rej)=>{ const p=a.decodeAudioData(f instanceof ArrayBuffer?f.slice(0):f,res,rej); if(p&&p.then) p.then(res,rej); });
     _ownBuf=buf; return true; }catch(_){ return false; } finally{ _ownLoading=false; } }
-function playClick(kind){ if(!clickOn||reduceMotion&&kind==="tick") return; try{ const a=sndCtx(); if(!a) return; (SND[sndKind]||SND.gem)(a.currentTime+0.005,kind==="place"); }catch(_){} }
+function playClick(kind){ if(!clickOn||reduceMotion&&kind==="tick") return; try{ const a=sndCtx(); if(!a) return; const k=sndKind==="gem"&&typeof cur!=="undefined"&&cur&&cur.type==="cross"?"needle":sndKind; (SND[k]||SND.gem)(a.currentTime+0.005,kind==="place"); }catch(_){} }
 function setSound(id,silent){ sndKind=id; clickOn=id!=="off"; ls.set("mystitch.snd",id); soundUISync(); if(!silent&&clickOn) playClick("place"); }
 function renderSoundPicker(box){ if(!box) return; box.innerHTML="";
   const g=document.createElement("div"); g.className="snd-grid"; g.setAttribute("role","radiogroup"); g.setAttribute("aria-label","Звук");
@@ -2008,7 +2025,7 @@ const RUGS=[
  {id:"rug-star-teal",n:"бирюзовый со звездой",d:"star",pal:{red:"#1f8f8a",dred:"#145e5c",cream:"#f4efe2",orange:"#e2a34a",black:"#1b2326",blue:"#c4523e",white:"#fbfaf7"}},
  {id:"rug-frames",n:"зелёно-красный",d:"frames",pal:{green:"#1f6b3a",dgreen:"#144a28",red:"#cf2a26",cream:"#f3e6c6",gold:"#b9852f"}},
  {id:"rug-sun",n:"солнечный жёлтый",d:"sun",pal:{yellow:"#f5b51d",orange:"#ee7d17",cream:"#f8efd6",green:"#86a85a",dgreen:"#4f7a3a",red:"#d8452a"}}];
-const RUG_W=96, RUG_H=144, RUG_M=4; // стежков; RUG_M — поля чистой канвы вокруг
+const RUG_W=168, RUG_H=196, RUG_M=5; // стежков; RUG_M — поля чистой канвы вокруг
 function rugCell(R,x,y){ const P=R.pal, W=RUG_W-2*RUG_M, H=RUG_H-2*RUG_M; x-=RUG_M; y-=RUG_M; if(x<0||y<0||x>=W||y>=H) return null;
   const e=Math.min(x,y,W-1-x,H-1-y), cx=(W-1)/2, cy=(H-1)/2, dx=Math.abs(x-cx), dy=Math.abs(y-cy), along=(x===e||W-1-x===e)?y:x, hsh=((x*73856093)^(y*19349663))>>>0;
   if(R.d==="medal"){ if(e<=1) return P.red; if(e<=6){ const t=e-2, w=Math.abs((along%8)-4); if(t===w||t===w-1&&w>2) return P.cream; if(t===4&&along%4===0) return P.gold; return P.red; }
@@ -2044,6 +2061,10 @@ function crossCell(g,x,y,s,hex){ const p=s*0.1, lw=s*0.42; g.lineCap="round";
     const dx=x1-x0, dy=y1-y0, len=Math.hypot(dx,dy), nx=-dy/len, ny=dx/len; g.lineWidth=Math.max(0.6,s*0.06); for(let k=0;k<5;k++){ const o=(k/4-0.5)*lw*0.75; g.strokeStyle=k%2?"rgba(255,255,255,.22)":"rgba(0,0,0,.16)"; g.beginPath(); g.moveTo(x0+nx*o+dx*0.08,y0+ny*o+dy*0.08); g.lineTo(x1+nx*o-dx*0.08,y1+ny*o-dy*0.08); g.stroke(); } };
   arm(x+p,y+s-p,x+s-p,y+p,false); arm(x+p,y+p,x+s-p,y+s-p,true); }
 const rugCache={};
+// узор ковра — маленькая текстура «стежок = пиксель»; сами крестики рисует шейдер, поэтому вблизи они чёткие при любом приближении
+function rugPattern(R){ const key="p:"+R.id; if(rugCache[key]) return rugCache[key]; const d=new Uint8Array(RUG_W*RUG_H*4);
+  for(let y=0;y<RUG_H;y++) for(let x=0;x<RUG_W;x++){ const h=rugCell(R,x,y), i=((RUG_H-1-y)*RUG_W+x)*4; const c=h||"#f4f1ea"; d[i]=parseInt(c.slice(1,3),16); d[i+1]=parseInt(c.slice(3,5),16); d[i+2]=parseInt(c.slice(5,7),16); d[i+3]=h?255:0; }
+  const t=new THREE.DataTexture(d,RUG_W,RUG_H,THREE.RGBAFormat); t.colorSpace=THREE.SRGBColorSpace; t.generateMipmaps=true; t.minFilter=THREE.LinearMipmapLinearFilter; t.magFilter=THREE.LinearFilter; t.anisotropy=MAXANI; t.needsUpdate=true; rugCache[key]=t; return t; }
 function rugTexture(R){ if(rugCache[R.id]) return rugCache[R.id]; const s=12, c=document.createElement("canvas"); c.width=RUG_W*s; c.height=RUG_H*s; const g=c.getContext("2d");
   // белая канва аида с дырочками
   g.fillStyle="#f4f1ea"; g.fillRect(0,0,c.width,c.height); g.fillStyle="rgba(120,110,95,.35)"; for(let y=0;y<=RUG_H;y++) for(let x=0;x<=RUG_W;x++){ g.beginPath(); g.arc(x*s,y*s,s*0.12,0,Math.PI*2); g.fill(); }
@@ -2067,13 +2088,32 @@ function bgFar(T){ if(!T.g) return T.hex; if(T.g[0]==="radial") return T.g[2]; c
 const table=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),tableMat); table.receiveShadow=true; scene.add(table);
 const floorMat=new THREE.MeshBasicMaterial({map:TEX.glow,color:0x5a5650,transparent:false});
 const floor=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshStandardMaterial({color:0x2b2926,roughness:0.95,metalness:0})); floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
-const rugMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.95,metalness:0,envMapIntensity:0.12}); rugMat.toneMapped=false;
+const rugMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.95,metalness:0,envMapIntensity:0.12}); rugMat.toneMapped=false; rugMat.defines={USE_UV:""};
+const RUGU={tRug:{value:null},uRugN:{value:new THREE.Vector2(RUG_W,RUG_H)}};
+rugMat.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,RUGU);
+  sh.fragmentShader=sh.fragmentShader.replace("#include <common>","#include <common>\nuniform sampler2D tRug; uniform vec2 uRugN;").replace("#include <map_fragment>",`
+  { vec2 g=vUv*uRugN; vec2 cl=clamp(floor(g),vec2(0.0),uRugN-1.0); vec2 f=fract(g); float aa=max(fwidth(g.x),fwidth(g.y));
+    vec4 pc=texelFetch(tRug,ivec2(cl),0); vec4 far=texture2D(tRug,vUv);
+    vec3 cv=vec3(0.904,0.882,0.835);
+    vec2 hc=f-floor(f+0.5); float hole=smoothstep(0.075,0.075+aa*1.2,length(hc)); vec3 col=mix(cv*0.55,cv,hole);
+    vec2 wv=abs(fract(g*vec2(1.0,1.0)+0.5)-0.5); col*=0.96+0.04*smoothstep(0.0,0.25,min(wv.x,wv.y));
+    if(pc.a>0.5){ float w=0.255;
+      float s1=(f.x-f.y)*0.7071, s2=(f.x+f.y-1.0)*0.7071, l1=(f.x+f.y)*0.7071, l2=(f.x-f.y+1.0)*0.7071;
+      float c1=(1.0-smoothstep(w-aa,w+aa,abs(s1)))*smoothstep(0.02,0.02+aa,l1)*(1.0-smoothstep(1.39,1.39+aa,l1));
+      float c2=(1.0-smoothstep(w-aa,w+aa,abs(s2)))*smoothstep(0.02,0.02+aa,l2)*(1.0-smoothstep(1.39,1.39+aa,l2));
+      float tw1=0.9+0.1*sin((s1*5.0/w+l1*9.0)*3.14159), tw2=0.9+0.1*sin((s2*5.0/w-l2*9.0)*3.14159);
+      float r1=1.0-0.42*pow(abs(s1)/w,2.0), r2=1.0-0.42*pow(abs(s2)/w,2.0);
+      col=mix(col,pc.rgb*0.8*tw2*r2,c2); col=mix(col,pc.rgb*tw1*r1,c1); }
+    vec3 avg=far.rgb*mix(0.95,0.86,far.a);
+    col=mix(col,avg,smoothstep(0.35,0.8,aa));
+    diffuseColor.rgb*=col; }`); };
+rugMat.customProgramCacheKey=()=>"rugx";
 const rug=new THREE.Mesh(new THREE.PlaneGeometry(1,1),rugMat); rug.rotation.x=-Math.PI/2; rug.receiveShadow=true; rug.visible=false; scene.add(rug);
 let padW=10,padH=10;
 // ковёр лежит на стеклянном столе под планшетом: цельный, вдоль работы, с полями канвы
 function applyRug(){ const R=RUGS.find(r=>r.id===ls.get("mystitch.rug")); if(!R){ rug.visible=false; needRender=true; shadowDirty=true; return; }
-  const t=rugTexture(R); rugMat.map=t; rugMat.bumpMap=t; rugMat.bumpScale=1.1; rugMat.needsUpdate=true;
-  const land=padW>padH, ps=Math.min(padW,padH), pl=Math.max(padW,padH), sh=Math.max(ps*1.45,pl*1.35/1.5), lg=sh*1.5;
+  RUGU.tRug.value=rugPattern(R); rugMat.map=null; rugMat.bumpMap=null; rugMat.needsUpdate=true;
+  const land=padW>padH, ps=Math.min(padW,padH), pl=Math.max(padW,padH), sh=Math.max(ps*2.3,pl*2.1), lg=sh*RUG_H/RUG_W;
   rug.scale.set(sh,lg,1); rug.rotation.set(-Math.PI/2,0,land?Math.PI/2:0); rug.position.y=table.position.y+table.scale.y/2+0.02; rug.visible=true; needRender=true; shadowDirty=true; }
 function bgDot(){ const d=$("tGlowDot"); if(!d) return; const T=tableOf(ls.get("mystitch.table")); d.classList.remove("off"); d.style.background=tableCss(T); d.style.boxShadow="0 0 0 2px rgba(255,255,255,.14)"; $("tGlow").title="Цвет фона: "+T.n; }
 function applyTable(){ const T=tableOf(ls.get("mystitch.table")); table.visible=true; floor.visible=false; shadowDirty=true; if(T.g){ if(tableMat.map) tableMat.map.dispose(); tableMat.map=gradientTexture(T,Math.min(0.5,(S*1.6+40)/table.scale.x)); tableMat.color.set(0xffffff); } else { if(tableMat.map){ tableMat.map.dispose(); tableMat.map=null; } tableMat.color.set(T.hex); } tableMat.needsUpdate=true;
@@ -2245,9 +2285,9 @@ let lastSnd=0, eraseOn=false;
 // ластик: убирает поставленное под отпечатком текущей насадки
 function eraseFoot(center){ let w=tool.w, h=tool.h; if(toolRot&&w!==h){ const t=w; w=h; h=t; } const c0=center%W, r0=(center-c0)/W, sx=-Math.floor((w-1)/2), sy=-Math.floor((h-1)/2), out=[];
   for(let dy=0;dy<h;dy++) for(let dx=0;dx<w;dx++){ const c=c0+sx+dx, r=r0+sy+dy; if(c<0||r<0||c>=W||r>=H) continue; const i=r*W+c; if(cur.cells[i]>=0) out.push(i); } return out; }
-function eraseAt(i){ const list=eraseFoot(i); if(!list.length) return; for(const j of list) setCell(j,-1); const now=performance.now(); if(now-lastSnd>40){ playClick("tick"); lastSnd=now; } needRender=true; }
+function eraseAt(i){ const list=eraseFoot(i); if(!list.length) return; for(const j of list) setCell(j,-1); const now=performance.now(); if(now-lastSnd>70){ playClick("tick"); lastSnd=now; } needRender=true; }
 function setErase(on){ eraseOn=on; $("tErase").classList.toggle("on",on); $("tErase").setAttribute("aria-pressed",String(on)); canvas.classList.toggle("erase",on); if(on){ hideGhost(); if(handOn) setHand(false); } handSync(); }
-function stampAt(i){ const list=footprint(i); if(!list.length) return; const to=palIdx(sel); const put=[]; for(const j of list) if(setCell(j,to)) put.push(j); settleCells(put); if(!put.length) return; const now=performance.now(); if(now-lastSnd>40){ playClick("place"); lastSnd=now; } needRender=true; }
+function stampAt(i){ const list=footprint(i); if(!list.length) return; const to=palIdx(sel); const put=[]; for(const j of list) if(setCell(j,to)) put.push(j); settleCells(put); if(!put.length) return; const now=performance.now(); if(now-lastSnd>70){ playClick("place"); lastSnd=now; } needRender=true; }
 function toolIcon(t,rot){ const c=document.createElement("canvas"); c.width=c.height=72; const g=c.getContext("2d"); let w=t.w,h=t.h; if(rot&&w!==h){ const x=w; w=h; h=x; } const s=Math.min(60/Math.max(w,h),22), ox=(72-w*s)/2, oy=(72-h*s)/2;
   for(let y=0;y<h;y++) for(let x=0;x<w;x++){ const cx=ox+(x+0.5)*s, cy=oy+(y+0.5)*s, r=s*0.42; const gr=g.createRadialGradient(cx-r*0.3,cy-r*0.35,1,cx,cy,r); gr.addColorStop(0,"#ffffff"); gr.addColorStop(0.5,"#b9c7dc"); gr.addColorStop(1,"#6d7c93"); g.fillStyle=gr; g.beginPath(); g.roundRect?g.roundRect(cx-r,cy-r,2*r,2*r,r*0.35):g.rect(cx-r,cy-r,2*r,2*r); g.fill(); }
   return c.toDataURL(); }
@@ -2797,7 +2837,7 @@ window.addEventListener("unhandledrejection",e=>{ if(!bootDone) bootFail(e.reaso
 async function boot(){ try{ await IDB.open(); }catch(_){} await Store.load(); route(); bootDone=true; loaderHide(); requestAnimationFrame(frame);
   try{ if(navigator.storage&&navigator.storage.persisted&&!(await navigator.storage.persisted())) navigator.storage.persist().catch(()=>{}); }catch(_){} }
 window.__dbg=()=>({cam:{t:cam.t.toArray(),r:cam.r,phi:cam.phi,theta:cam.theta},g:{t:cam.g.t.toArray(),r:cam.g.r},W,H,Wp:W_px,Hp:H_px});
-window.__ms={state:()=>cur&&{w:W,h:H,pal:cur.pal.length,placed:counts.placedAll,ok:counts.okAll,total:counts.total,sel,step:cur.step,blocks:blocks.length,tool:tool.id},cellXY:i=>{ const r=canvas.getBoundingClientRect(), p=cellScreen(i); return [r.left+p[0],r.top+p[1]]; },firstOf:code=>{ const si=cur.pal.indexOf(code); return cur.grid.findIndex((t,i)=>t===si&&cur.cells[i]<0); },fillAll:()=>{ beginStroke(); for(let i=0;i<cur.grid.length;i++) if(cur.grid[i]>=0) setCell(i,cur.grid[i]); endStroke(); },fillBlock:()=>{ const b=curBlock(); beginStroke(); for(let r=b.y0;r<b.y1;r++) for(let c=b.x0;c<b.x1;c++){ const i=r*W+c; if(cur.grid[i]>=0) setCell(i,cur.grid[i]); } endStroke(); },cam:(th,ph,r,x,z)=>{ camGo(new THREE.Vector3(x||0,0,z||0),r,ph,th,true); },tool:id=>setTool(TOOLS.find(t=>t.id===id)),mode:m=>{ dragMode=m; handSync(); },vis:()=>visList&&visList.map(v=>v.code),ghost:()=>!!(ghost&&ghost.visible),fillCode:code=>{ const si=cur.pal.indexOf(code); beginStroke(); for(let i=0;i<cur.grid.length;i++) if(cur.grid[i]===si) setCell(i,si); endStroke(); updateCountsUI(); },okCell:i=>cur.cells[i]<0&&cur.grid[i]===cur.pal.indexOf(sel),info:()=>({calls:renderer.info.render.calls,tris:renderer.info.render.triangles})};
+window.__ms={state:()=>cur&&{w:W,h:H,pal:cur.pal.length,placed:counts.placedAll,ok:counts.okAll,total:counts.total,sel,step:cur.step,blocks:blocks.length,tool:tool.id},cellXY:i=>{ const r=canvas.getBoundingClientRect(), p=cellScreen(i); return [r.left+p[0],r.top+p[1]]; },firstOf:code=>{ const si=cur.pal.indexOf(code); return cur.grid.findIndex((t,i)=>t===si&&cur.cells[i]<0); },fillAll:()=>{ beginStroke(); for(let i=0;i<cur.grid.length;i++) if(cur.grid[i]>=0) setCell(i,cur.grid[i]); endStroke(); },fillBlock:()=>{ const b=curBlock(); beginStroke(); for(let r=b.y0;r<b.y1;r++) for(let c=b.x0;c<b.x1;c++){ const i=r*W+c; if(cur.grid[i]>=0) setCell(i,cur.grid[i]); } endStroke(); },cam:(th,ph,r,x,z)=>{ camGo(new THREE.Vector3(x||0,0,z||0),r,ph,th,true); },tool:id=>setTool(TOOLS.find(t=>t.id===id)),mode:m=>{ dragMode=m; handSync(); },vis:()=>visList&&visList.map(v=>v.code),ghost:()=>!!(ghost&&ghost.visible),fillCode:code=>{ const si=cur.pal.indexOf(code); beginStroke(); for(let i=0;i<cur.grid.length;i++) if(cur.grid[i]===si) setCell(i,si); endStroke(); updateCountsUI(); },sndTest:()=>{ try{ const a=sndCtx(); const t=a.currentTime; Object.keys(SND).filter(k=>k!=="own").forEach(k=>{ SND[k](t,true); SND[k](t,false); }); return "ok "+a.state; }catch(e){ return "err "+e.message; } },okCell:i=>cur.cells[i]<0&&cur.grid[i]===cur.pal.indexOf(sel),info:()=>({calls:renderer.info.render.calls,tris:renderer.info.render.triangles})};
 boot();
 })();
 </script>
