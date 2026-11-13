@@ -1231,7 +1231,7 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 
 <!-- ГЛАВНАЯ -->
 <section class="scr" id="scrHome" hidden>
-  <header class="topbar"><span class="wordmark"><i class="logo" aria-hidden="true"></i>MyStitch<small class="ver">версия 25</small></span><span class="grow"></span>
+  <header class="topbar"><span class="wordmark"><i class="logo" aria-hidden="true"></i>MyStitch<small class="ver">версия 26</small></span><span class="grow"></span>
     <div class="hnav"><div class="hseg" role="tablist" aria-label="Раздел"><button role="tab" id="hsModels" aria-selected="true"><span class="lg">Готовые схемы</span><span class="sh">Схемы</span></button><button role="tab" id="hsOwn" aria-selected="false"><span class="lg">Самостоятельная вышивка</span><span class="sh">Своя</span></button></div><button class="hprof acct-open" id="hProfile" aria-label="Персонализация и память" title="Персонализация и память"><svg class="ic"><use href="#i-user"/></svg></button></div>
     <span class="grow"></span>
     <button class="pill tb-load" id="tbLoad" tabindex="-1"><svg class="ic"><use href="#i-image"/></svg><span>Загрузить картинку</span></button></header>
@@ -1820,8 +1820,8 @@ float msSoftShadow( sampler2D shadowMap, vec2 shadowMapSize, float shadowBias, f
   if(shadowCoord.x<0.0||shadowCoord.x>1.0||shadowCoord.y<0.0||shadowCoord.y>1.0||shadowCoord.z>1.0) return 1.0;
   float a=fract(sin(dot(gl_FragCoord.xy,vec2(12.9898,78.233)))*43758.5453)*6.2831853; float c=cos(a), s=sin(a); mat2 R=mat2(c,-s,s,c);
   vec2 ts=shadowRadius/shadowMapSize; float sh=0.0;
-  for(int k=0;k<16;k++) sh+=texture2DCompare(shadowMap,shadowCoord.xy+R*MS_PD[k]*ts,shadowCoord.z);
-  sh/=16.0; return 1.0-0.62*(1.0-sh); }
+  for(int k=0;k<8;k++) sh+=texture2DCompare(shadowMap,shadowCoord.xy+R*MS_PD[k*2]*ts,shadowCoord.z);
+  sh/=8.0; return 1.0-0.62*(1.0-sh); }
 #endif
 `;
   C.lights_fragment_begin=C.lights_fragment_begin.replace("? getShadow( directionalShadowMap[ i ]","? msSoftShadow( directionalShadowMap[ i ]"); })();
@@ -1932,6 +1932,12 @@ varying vec2 vChartUv; uniform sampler2D tCells; uniform sampler2D tPal; uniform
         float l=dot(col,vec3(0.2126,0.7152,0.0722)); vec3 ink=l>0.24?vec3(0.015,0.017,0.02):vec3(0.92); col=mix(col,ink,a*0.92); }
       if(placed){ float cpx=1.0/max(max(fwidth(g.x),fwidth(g.y)),1e-4); float farK=1.0-smoothstep(4.5,6.0,cpx);
         if(farK>0.0){ vec2 q=abs(f-0.5)*2.0; float m=max(q.x,q.y); vec3 st=pow(pc,vec3(FAR_POW))*FAR_K*(0.92+0.16*(1.0-m)); st*=mix(1.0,0.7,smoothstep(0.8,1.0,m)); col=mix(col,st,farK); } }
+      if(!placed&&uPx>5.0){ vec2 px1=1.0/uGrid, uvc=(cell+0.5)/uGrid; float sh=0.0;
+        sh+=step(0.5,texture2D(tCells,uvc-vec2(px1.x,0.0)).b)*(1.0-smoothstep(0.0,0.3,f.x))*step(0.5,cell.x);
+        sh+=step(0.5,texture2D(tCells,uvc+vec2(px1.x,0.0)).b)*(1.0-smoothstep(0.0,0.3,1.0-f.x))*step(cell.x,uGrid.x-1.5);
+        sh+=step(0.5,texture2D(tCells,uvc-vec2(0.0,px1.y)).b)*(1.0-smoothstep(0.0,0.3,f.y))*step(0.5,cell.y);
+        sh+=step(0.5,texture2D(tCells,uvc+vec2(0.0,px1.y)).b)*(1.0-smoothstep(0.0,0.3,1.0-f.y))*step(cell.y,uGrid.y-1.5);
+        col*=1.0-0.2*min(sh,1.4); }
       if(valid&&uSel>=0.0&&abs(idx-uSel)<0.5&&!placed){ float p=0.5+0.5*sin(uTime*5.0); col=mix(col,vec3(0.87,0.06,0.3),0.22+0.3*p); }
       glowPass=1.0;
     }
@@ -2196,7 +2202,7 @@ function applyTable(){ const T=tableOf(ls.get("mystitch.table")); table.visible=
 const padMat=new THREE.MeshStandardMaterial({color:0xf2f2f2,roughness:0.6,metalness:0,emissive:new THREE.Color(0)});
 const pad=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),padMat); pad.receiveShadow=true; pad.castShadow=true; scene.add(pad);
 paperMat.polygonOffset=true; paperMat.polygonOffsetFactor=-2; paperMat.polygonOffsetUnits=-4;
-const paper=new THREE.Mesh(new THREE.PlaneGeometry(1,1),paperMat); paper.rotation.x=-Math.PI/2; paper.receiveShadow=true; scene.add(paper);
+const paper=new THREE.Mesh(new THREE.PlaneGeometry(1,1),paperMat); paper.rotation.x=-Math.PI/2; paper.receiveShadow=false; scene.add(paper);
 const haloMat=new THREE.MeshBasicMaterial({map:TEX.glow,color:0xffffff,transparent:true,opacity:0.32,blending:THREE.AdditiveBlending,depthWrite:false});
 const halo=new THREE.Mesh(new THREE.PlaneGeometry(1,1),haloMat); halo.rotation.x=-Math.PI/2; halo.renderOrder=1; scene.add(halo);
 const selRing=new THREE.Mesh(new THREE.RingGeometry(0.69,0.8,4,1,Math.PI/4),new THREE.MeshBasicMaterial({color:0xF0569B,depthTest:false,transparent:true})); selRing.rotation.x=-Math.PI/2; selRing.renderOrder=5; selRing.visible=false; scene.add(selRing);
@@ -2223,7 +2229,7 @@ function texCell(i){ const r0=(i/W)|0; if(r0<texRows[0]) texRows[0]=r0; if(r0>te
 function applyFabric(){ const F=fabricOf(cur.fabric); paperMat.color.set(F.hex); needRender=true; }
 function applyGlow(){ const G=glowOf(cur.glow), k=(cur.glowK==null?70:cur.glowK)/100; if(G.hex&&k>0){ const c=new THREE.Color(G.hex); U.uGlow.value.copy(c).multiplyScalar(0.26*k); padMat.emissive.copy(c).multiplyScalar(0.95*k); haloMat.color.copy(c); halo.visible=false; } else { U.uGlow.value.setRGB(0,0,0); padMat.emissive.setRGB(0,0,0); halo.visible=false; } needRender=true; }
 function placeLights(){ const L=LIGHTS[lightMode]||LIGHTS[0]; key.intensity=L.k; fill.intensity=L.f; key.color.set(L.col||0xfff5e8); const d=new THREE.Vector3();
-  gemMat.envMapIntensity=2.0*(L.env?L.env/2:1); gemMatLo.envMapIntensity=1.5*(L.env?L.env/2:1); xLights.forEach((l,i)=>{ const x=L.x&&L.x[i]; if(!x){ l.intensity=0; return; } const v=new THREE.Vector3().fromArray(x[0]).normalize(); l.position.copy(v).multiplyScalar(S*2+50); l.color.set(x[1]); l.intensity=x[2]; });
+  gemMat.envMapIntensity=2.0*(L.env?L.env/2:1); gemMatLo.envMapIntensity=1.5*(L.env?L.env/2:1); xLights.forEach((l,i)=>{ const x=L.x&&L.x[i]; l.visible=!!x; if(!x){ l.intensity=0; return; } const v=new THREE.Vector3().fromArray(x[0]).normalize(); l.position.copy(v).multiplyScalar(S*2+50); l.color.set(x[1]); l.intensity=x[2]; });
   if(L.cam){ const a=cam.theta+(L.co==null?0.5:L.co); d.set(Math.sin(a),L.cy||1.15,Math.cos(a)); } else d.fromArray(L.d); d.normalize();
   key.position.copy(d).multiplyScalar(S*2.2+60); key.target.position.set(0,0,0); fill.position.set(-d.x,0.6,-d.z).multiplyScalar(S*2+50); shadowDirty=true; needRender=true; }
 
@@ -2236,7 +2242,7 @@ function makeChunk(k){ const cx=k%1000, cy=Math.floor(k/1000), cap=CH*CH, hi=geo
   const A=new THREE.InstancedMesh(hi,mat,cap), B=new THREE.InstancedMesh(lo,matForLo(cur.type,shapeOf(cur)),cap), C=new THREE.InstancedMesh(geoMin(cur.type,shapeOf(cur)),matForLo(cur.type,shapeOf(cur)),cap); B.instanceMatrix=A.instanceMatrix; C.instanceMatrix=A.instanceMatrix; A.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(cap*3),3); B.instanceColor=A.instanceColor; C.instanceColor=A.instanceColor; A.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   // запасные экземпляры — нулевые: даже если когда-нибудь попадут в отрисовку, их не видно (по умолчанию three ставит их в угол куска)
   A.instanceMatrix.array.fill(0);
-  [A,B,C].forEach(M=>{ M.position.set(cx*CH-W/2,0,cy*CH-H/2); M.boundingSphere=new THREE.Sphere(new THREE.Vector3(CH/2,0.2,CH/2),CH*0.72); M.castShadow=true; M.receiveShadow=true; M.count=0; scene.add(M); });
+  [A,B,C].forEach(M=>{ M.position.set(cx*CH-W/2,0,cy*CH-H/2); M.boundingSphere=new THREE.Sphere(new THREE.Vector3(CH/2,0.2,CH/2),CH*0.72); M.castShadow=false; M.receiveShadow=false; M.count=0; scene.add(M); });
   const o={k,cx,cy,A,B,C,center:new THREE.Vector3(cx*CH-W/2+CH/2,0,cy*CH-H/2+CH/2)}; chunks.set(k,o); return o; }
 function rebuildChunk(k){ let o=chunks.get(k); if(!o) o=makeChunk(k); const {cx,cy,A}=o; let n=0; const round=cur.shape==="round", cross=cur.type==="cross", now=performance.now();
   for(let lr=0;lr<CH;lr++){ const r=cy*CH+lr; if(r>=H) break; for(let lc=0;lc<CH;lc++){ const c=cx*CH+lc; if(c>=W) break; const i=r*W+c, p=cur.cells[i]; if(p<0) continue;
@@ -2258,7 +2264,7 @@ function settlePose(k,cross){ if(cross){ const e=k<1?1+2.2*Math.pow(k-1,3)+1.2*M
 // если устройство не успевает рисовать анимацию плавно (огромная почти готовая мозаика), детали ставятся сразу — без подтормаживания
 let liteSettle=false, setFrames=[], lastFrameT=0;
 function settleCells(list){ if(reduceMotion||liteSettle||!list.length) return; const now=performance.now(); for(const i of list){ settle.set(i,now); dirtyChunks.add(chunkOf(i)); } needRender=true; }
-function tickSettle(now){ let fin=false; const land=SETTLE_MS*(cur.type==="cross"?0.3:0.6); settle.forEach((t0,i)=>{ const a=now-t0; if(a>=land&&texHold.delete(i)){ texCell(i); cellTexDirty=true; } if(a>=SETTLE_MS){ settle.delete(i); fin=true; } dirtyChunks.add(chunkOf(i)); }); if(fin) shadowDirty=true; needRender=true; }
+function tickSettle(now){ let fin=false; const land=SETTLE_MS*(cur.type==="cross"?0.3:0.6); settle.forEach((t0,i)=>{ const a=now-t0; if(a>=land&&texHold.delete(i)){ texCell(i); cellTexDirty=true; } if(a>=SETTLE_MS){ settle.delete(i); fin=true; } dirtyChunks.add(chunkOf(i)); });  needRender=true; }
 function uploadCells(){ const p=renderer.properties.get(cellTex), wt=p.__webglTexture, rows=texRows[1]-texRows[0]+1;
   if(!wt||p.__version!==cellTex.version||rows<=0||rows>H*0.4){ cellTex.needsUpdate=true; }
   else { const gl=renderer.getContext(); renderer.state.activeTexture(gl.TEXTURE0); renderer.state.bindTexture(gl.TEXTURE_2D,wt); gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL,false); gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL,false); gl.pixelStorei(gl.UNPACK_ALIGNMENT,1);
@@ -2268,7 +2274,7 @@ function disposeChunks(){ settle.clear(); liteSettle=false; setFrames=[]; texHol
 function buildAllChunks(){ disposeChunks(); const has=new Set(); for(let i=0;i<cur.cells.length;i++) if(cur.cells[i]>=0) has.add(chunkOf(i)); has.forEach(k=>rebuildChunk(k)); ghostGeo(); }
 function restyleChunks(){ chunks.forEach(o=>{ o.A.geometry=geoFor(cur.type,shapeOf(cur),true); o.B.geometry=geoFor(cur.type,shapeOf(cur),false); o.C.geometry=geoMin(cur.type,shapeOf(cur)); o.C.material=matForLo(cur.type,shapeOf(cur)); o.A.material=matFor(cur.type,shapeOf(cur)); o.B.material=matForLo(cur.type,shapeOf(cur)); }); chunks.forEach((o,k)=>rebuildChunk(k)); U.uCross.value=cur.type==="cross"?1:0; ghostGeo(); shadowDirty=true; needRender=true; }
 let lastEditT=0;
-function flushChunks(){ dirtyChunks.forEach(k=>rebuildChunk(k)); dirtyChunks.clear(); shadowDirty=true; lastEditT=performance.now(); }
+function flushChunks(){ dirtyChunks.forEach(k=>rebuildChunk(k)); dirtyChunks.clear(); lastEditT=performance.now(); }
 const _wp=new THREE.Vector3();
 function updateLOD(){ const th=Math.tan(camera.fov*Math.PI/360); chunks.forEach(o=>{ const d=Math.max(0.5,camera.position.distanceTo(o.center)-CH*0.5); const px=H_px/(2*d*th); const hi=px>=18, far=px<FAR_PX, mid=!hi&&!far&&(cur.type==="cross"||px>=9); o.A.visible=hi&&o.A.count>0; o.B.visible=mid&&o.B.count>0; o.C.visible=!hi&&!far&&!mid&&o.C.count>0; }); }
 let FAR_PX=4.5;
@@ -2318,13 +2324,13 @@ let visT=0, W_px=1,H_px=1, needRender=true, shadowDirty=true, lastShadow=0;
 let previewOn=false; // 3D-превью готовой работы на странице схемы — тот же стол и те же детали, только смотреть
 let dprLive=0, moveT=0;
 function setLiveDpr(d){ if(Math.abs(d-dprLive)<0.01) return; dprLive=d; renderer.setPixelRatio(d); renderer.setSize(W_px,H_px,false); needRender=true; }
-function resize(){ if(ws.hidden&&!previewOn) return; const r=(previewOn?$("mdViewer"):ws).getBoundingClientRect(); W_px=Math.max(1,Math.round(r.width)); H_px=Math.max(1,Math.round(r.height)); dpr=Math.min(window.devicePixelRatio||1,2); dprLive=dpr; renderer.setPixelRatio(dpr); renderer.setSize(W_px,H_px,false); camera.aspect=W_px/H_px; camera.updateProjectionMatrix(); needRender=true; insDirty=true; insApplyPos(); }
+function resize(){ if(ws.hidden&&!previewOn) return; const r=(previewOn?$("mdViewer"):ws).getBoundingClientRect(); W_px=Math.max(1,Math.round(r.width)); H_px=Math.max(1,Math.round(r.height)); dpr=Math.min(window.devicePixelRatio||1,1.5); dprLive=dpr; renderer.setPixelRatio(dpr); renderer.setSize(W_px,H_px,false); camera.aspect=W_px/H_px; camera.updateProjectionMatrix(); needRender=true; insDirty=true; insApplyPos(); }
 new ResizeObserver(resize).observe(ws); new ResizeObserver(()=>{ if(previewOn) resize(); }).observe($("mdViewer"));
 function frame(now){ requestAnimationFrame(frame); if((ws.hidden&&!previewOn)||!cur) return;
   // холст всегда во всё окно: если размер окна поменялся незаметно для наблюдателя — подгоняем
   if(canvas.clientWidth&&(Math.abs(canvas.clientWidth-W_px)>1||Math.abs(canvas.clientHeight-H_px)>1)) resize();
   const mv=updateCamera();
-  if(mv){ moveT=now; if(dpr>1.3) setLiveDpr(Math.max(1,dpr*0.62)); } else if(dprLive!==dpr&&now-moveT>220) setLiveDpr(dpr); if(dirtyChunks.size){ flushChunks(); needRender=true; } if(cellTexDirty){ uploadCells(); cellTexDirty=false; needRender=true; }
+   if(dirtyChunks.size){ flushChunks(); needRender=true; } if(cellTexDirty){ uploadCells(); cellTexDirty=false; needRender=true; }
   if(hintOn&&sel&&isChart()){ U.uTime.value=now/1000; needRender=true; } if(settle.size){ if(lastFrameT){ setFrames.push(now-lastFrameT); if(setFrames.length>24) setFrames.shift(); if(setFrames.length>=12){ const a=setFrames.slice().sort((x,y)=>x-y)[setFrames.length>>1]; if(a>40){ liteSettle=true; settle.forEach((t,i)=>dirtyChunks.add(chunkOf(i))); settle.clear(); } } } tickSettle(now); } lastFrameT=now; if(G.anim){ tickGhost(now); needRender=true; } else if(ghost&&ghost.visible&&!outer&&!(gest&&gest.kind==="stamp"&&ptrs.size>0)&&now-G.t>700){ if(gest&&gest.kind==="stamp") gest=null; hideGhost(); }
   if(mv||needRender){ const th=Math.tan(camera.fov*Math.PI/360); U.uPx.value=H_px/(2*camera.position.distanceTo(cam.t)*th); updateLOD();
     if(selCell>=0){ const c=selCell%W, r=(selCell-c)/W; selRing.position.set(c-W/2+0.5,0.03,r-H/2+0.5); selRing.visible=true; } else selRing.visible=false;
@@ -2351,7 +2357,7 @@ function setCell(i,to){ const from=cur.cells[i]; if(from===to) return false; con
   cur.cells[i]=to; if(to>=0){ counts.placed[to]++; counts.placedAll++; if(t===to){ counts.ok[to]++; counts.okAll++; } }
   texCell(i); cellTexDirty=true; dirtyChunks.add(chunkOf(i)); if(stroke) stroke.push({i,from,to}); return true; }
 function beginStroke(){ stroke=[]; }
-function endStroke(){ shadowDirty=true; needRender=true; if(stroke&&stroke.length){ undoStack.push(stroke); if(undoStack.length>200) undoStack.shift(); redoStack.length=0; } stroke=null; changed(); }
+function endStroke(){ needRender=true; if(stroke&&stroke.length){ undoStack.push(stroke); if(undoStack.length>200) undoStack.shift(); redoStack.length=0; } stroke=null; changed(); }
 function applyOps(ops,back){ for(let k=back?ops.length-1:0; back?k>=0:k<ops.length; back?k--:k++){ const o=ops[k]; setCell(o.i,back?o.from:o.to); } }
 function undo(){ const ops=undoStack.pop(); if(!ops) return; applyOps(ops,true); redoStack.push(ops); selCell=-1; hideEdit(); changed(); playClick("tick"); }
 function redo(){ const ops=redoStack.pop(); if(!ops) return; applyOps(ops,false); undoStack.push(ops); selCell=-1; hideEdit(); changed(); playClick("tick"); }
