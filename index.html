@@ -1231,7 +1231,7 @@ body.dragging,body.dragging *{cursor:grabbing!important}
 
 <!-- ГЛАВНАЯ -->
 <section class="scr" id="scrHome" hidden>
-  <header class="topbar"><span class="wordmark"><i class="logo" aria-hidden="true"></i>MyStitch<small class="ver">версия 23</small></span><span class="grow"></span>
+  <header class="topbar"><span class="wordmark"><i class="logo" aria-hidden="true"></i>MyStitch<small class="ver">версия 24</small></span><span class="grow"></span>
     <div class="hnav"><div class="hseg" role="tablist" aria-label="Раздел"><button role="tab" id="hsModels" aria-selected="true"><span class="lg">Готовые схемы</span><span class="sh">Схемы</span></button><button role="tab" id="hsOwn" aria-selected="false"><span class="lg">Самостоятельная вышивка</span><span class="sh">Своя</span></button></div><button class="hprof acct-open" id="hProfile" aria-label="Персонализация и память" title="Персонализация и память"><svg class="ic"><use href="#i-user"/></svg></button></div>
     <span class="grow"></span>
     <button class="pill tb-load" id="tbLoad" tabindex="-1"><svg class="ic"><use href="#i-image"/></svg><span>Загрузить картинку</span></button></header>
@@ -1927,6 +1927,8 @@ varying vec2 vChartUv; uniform sampler2D tCells; uniform sampler2D tPal; uniform
       float tint=(placed||uPic>0.5)?0.96:(uCross>0.5?0.62:0.8); col=mix(paper,pc,tint);
       if(valid&&!placed&&uPic<0.5){ float sm=uCross>0.5?0.42:0.76; vec2 fs=(f-0.5)/sm+0.5; float inS=step(0.0,fs.x)*step(fs.x,1.0)*step(0.0,fs.y)*step(fs.y,1.0); vec2 su=(vec2(mod(idx,16.0),floor(idx/16.0))+clamp(fs,0.0,1.0)*0.76+0.12)/16.0; float a=texture2D(tSym,su).a*smoothstep(6.0,11.0,uPx)*inS*(uCross>0.5?0.6:1.0);
         float l=dot(col,vec3(0.2126,0.7152,0.0722)); vec3 ink=l>0.24?vec3(0.015,0.017,0.02):vec3(0.92); col=mix(col,ink,a*0.92); }
+      if(placed){ float cpx=1.0/max(max(fwidth(g.x),fwidth(g.y)),1e-4); float farK=1.0-smoothstep(4.5,6.0,cpx);
+        if(farK>0.0){ vec2 q=abs(f-0.5)*2.0; float m=max(q.x,q.y); vec3 st=pow(pc,vec3(FAR_POW))*FAR_K*(0.92+0.16*(1.0-m)); st*=mix(1.0,0.7,smoothstep(0.8,1.0,m)); col=mix(col,st,farK); } }
       if(valid&&uSel>=0.0&&abs(idx-uSel)<0.5&&!placed){ float p=0.5+0.5*sin(uTime*5.0); col=mix(col,vec3(0.87,0.06,0.3),0.22+0.3*p); }
       glowPass=1.0;
     }
@@ -1947,7 +1949,7 @@ varying vec2 vChartUv; uniform sampler2D tCells; uniform sampler2D tPal; uniform
   } else { vec2 e=max(-g,g-uGrid); float o=max(e.x,e.y); col=vec3(0.93); col=mix(col,vec3(0.05),(1.0-smoothstep(0.0,clamp(2.0/uPx,0.03,1.0),abs(o)))*0.4); }
   diffuseColor.rgb=col; }`)
   .replace("#include <emissivemap_fragment>","#include <emissivemap_fragment>\ntotalEmissiveRadiance+=uGlow*glowPass;"); };
-paperMat.customProgramCacheKey=()=>"mystitch-paper"; paperMat.toneMapped=false;
+paperMat.defines=Object.assign(paperMat.defines||{},{FAR_POW:"1.1",FAR_K:"0.8"}); paperMat.customProgramCacheKey=()=>"mystitch-paper"; paperMat.toneMapped=false;
 
 /* детали: три формы, у каждой — подробная (вблизи) и простая (издали) */
 function flatGeo(tris){ const g=new THREE.BufferGeometry(); g.setAttribute("position",new THREE.Float32BufferAttribute(tris,3)); g.computeVertexNormals(); return g; }
@@ -1986,6 +1988,11 @@ function crossGeo(hi){ const A=spindle(1.22,0.62,0.3,0.0,Math.PI/4,hi), B=spindl
 function tentGeo(hi){ const A=spindle(1.2,0.86,0.46,0.0,-Math.PI/4,hi); const m=mergeGeos([A]); A.dispose(); return m; }
 GEO.crossHi=crossGeo(true); GEO.crossLo=crossGeo(false); GEO.tentHi=tentGeo(true); GEO.tentLo=tentGeo(false);
 [GEO.squareHi,GEO.squareLo,GEO.roundHi,GEO.roundLo].forEach(g=>g.translate(0,0,0));
+// совсем простые стразы для дальнего плана: призма со скосом — 18–50 треугольников вместо ~60
+function minGeo(n,r0,rTop,h0,h1,rot){ const P=(r,y)=>Array.from({length:n},(_,i)=>{ const a=rot+i*2*Math.PI/n; return [Math.cos(a)*r,y,Math.sin(a)*r]; });
+  const b0=P(r0,0), b1=P(r0,h0), t=P(rTop,h1), tris=[]; const band=(A,B)=>{ for(let i=0;i<n;i++){ const j=(i+1)%n; tris.push([A[i],B[i],B[j]],[A[i],B[j],A[j]]); } };
+  band(b0,b1); band(b1,t); for(let i=1;i<n-1;i++) tris.push([t[0],t[i],t[i+1]]); return flatGeo(orientedTris(tris,0.1)); }
+GEO.squareMin=minGeo(4,0.465*Math.SQRT2,0.27*Math.SQRT2,0.12,0.39,Math.PI/4); GEO.roundMin=minGeo(10,0.46,0.27,0.11,0.39,0);
 
 /* материалы: стекло с радужным переливом и нить мулине с шелковистым блеском */
 const gemMat=new THREE.MeshPhysicalMaterial({color:0xffffff,metalness:0,roughness:0.035,transmission:0.78,thickness:0.6,ior:1.62,attenuationColor:new THREE.Color(0xffffff),attenuationDistance:2.5,
@@ -1994,8 +2001,14 @@ const gemMat=new THREE.MeshPhysicalMaterial({color:0xffffff,metalness:0,roughnes
 const flossMat=tex=>new THREE.MeshPhysicalMaterial({color:0xffffff,map:tex,bumpMap:tex,bumpScale:1.4,roughness:0.72,metalness:0,sheen:1,sheenRoughness:0.6,sheenColor:new THREE.Color(0xffffff).multiplyScalar(0.35),envMapIntensity:0.9});
 const threadMat=flossMat(TEX.flossX), tentMat=flossMat(TEX.flossT);
 const ghostMat=new THREE.MeshStandardMaterial({color:0xffffff,transparent:true,opacity:0.62,roughness:0.15,metalness:0,depthWrite:false,emissive:new THREE.Color(0x000000)});
+const geoMin=(type,shape)=>type==="cross"?geoFor(type,shape,false):shape==="round"?GEO.roundMin:GEO.squareMin;
 const geoFor=(type,shape,hi)=>type==="cross"?(shape==="tent"?(hi?GEO.tentHi:GEO.tentLo):(hi?GEO.crossHi:GEO.crossLo)):shape==="round"?(hi?GEO.roundHi:GEO.roundLo):(hi?GEO.squareHi:GEO.squareLo);
+// стразы издали: та же форма, но без дорогого просвечивания стекла — его всё равно не разглядеть, а кадр рисуется в разы быстрее
+const gemMatLo=new THREE.MeshPhysicalMaterial({color:0xffffff,metalness:0,roughness:0.06,ior:1.5,clearcoat:0.5,clearcoatRoughness:0.05,specularIntensity:0.8,envMapIntensity:1.5,flatShading:true});
+gemMatLo.onBeforeCompile=sh=>{ sh.fragmentShader=sh.fragmentShader.replace("#include <color_fragment>","#include <color_fragment>\ndiffuseColor.rgb=pow(diffuseColor.rgb,vec3(GEMLO_POW))*GEMLO_K;"); };
+gemMatLo.defines={GEMLO_POW:"1.25",GEMLO_K:"0.81"}; gemMatLo.transparent=true; gemMatLo.depthWrite=true; // не попадает в «подложку» для преломления у близких страз — не рисуется дважды gemMatLo.customProgramCacheKey=()=>"gemlo";
 const matFor=(type,shape)=>type==="cross"?(shape==="tent"?tentMat:threadMat):gemMat;
+const matForLo=(type,shape)=>type==="cross"?(shape==="tent"?tentMat:threadMat):gemMatLo;
 
 /* стол, светящийся планшет, лист */
 /* стеклянный стол: толстая плита с преломлением, цвет стекла меняется; под ней мягко освещённый пол — чтобы стекло читалось глубиной */
@@ -2144,7 +2157,7 @@ function bgFar(T){ if(!T.g) return T.hex; if(T.g[0]==="radial") return T.g[2]; c
 const table=new THREE.Mesh(new THREE.BoxGeometry(1,1,1),tableMat); table.receiveShadow=true; scene.add(table);
 const floorMat=new THREE.MeshBasicMaterial({map:TEX.glow,color:0x5a5650,transparent:false});
 const floor=new THREE.Mesh(new THREE.PlaneGeometry(1,1),new THREE.MeshStandardMaterial({color:0x2b2926,roughness:0.95,metalness:0})); floor.rotation.x=-Math.PI/2; floor.receiveShadow=true; scene.add(floor);
-const rugMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.95,metalness:0,envMapIntensity:0.12}); rugMat.toneMapped=false; rugMat.defines={USE_UV:""};
+const rugMat=new THREE.MeshStandardMaterial({color:0xffffff,roughness:0.95,metalness:0,envMapIntensity:0.12}); rugMat.toneMapped=false; rugMat.defines={USE_UV:""}; rugMat.transparent=true; rugMat.depthWrite=true;
 const RUGU={tRug:{value:null},uRugN:{value:new THREE.Vector2(RUG_W,RUG_H)}};
 rugMat.onBeforeCompile=sh=>{ Object.assign(sh.uniforms,RUGU);
   sh.fragmentShader=sh.fragmentShader.replace("#include <common>","#include <common>\nuniform sampler2D tRug; uniform vec2 uRugN;").replace("#include <map_fragment>",`
@@ -2206,7 +2219,7 @@ function texCell(i){ const d=cellTex.image.data, t=cur.grid?cur.grid[i]:-1, p=te
 function applyFabric(){ const F=fabricOf(cur.fabric); paperMat.color.set(F.hex); needRender=true; }
 function applyGlow(){ const G=glowOf(cur.glow), k=(cur.glowK==null?70:cur.glowK)/100; if(G.hex&&k>0){ const c=new THREE.Color(G.hex); U.uGlow.value.copy(c).multiplyScalar(0.26*k); padMat.emissive.copy(c).multiplyScalar(0.95*k); haloMat.color.copy(c); halo.visible=false; } else { U.uGlow.value.setRGB(0,0,0); padMat.emissive.setRGB(0,0,0); halo.visible=false; } needRender=true; }
 function placeLights(){ const L=LIGHTS[lightMode]||LIGHTS[0]; key.intensity=L.k; fill.intensity=L.f; key.color.set(L.col||0xfff5e8); const d=new THREE.Vector3();
-  gemMat.envMapIntensity=2.0*(L.env?L.env/2:1); xLights.forEach((l,i)=>{ const x=L.x&&L.x[i]; if(!x){ l.intensity=0; return; } const v=new THREE.Vector3().fromArray(x[0]).normalize(); l.position.copy(v).multiplyScalar(S*2+50); l.color.set(x[1]); l.intensity=x[2]; });
+  gemMat.envMapIntensity=2.0*(L.env?L.env/2:1); gemMatLo.envMapIntensity=1.5*(L.env?L.env/2:1); xLights.forEach((l,i)=>{ const x=L.x&&L.x[i]; if(!x){ l.intensity=0; return; } const v=new THREE.Vector3().fromArray(x[0]).normalize(); l.position.copy(v).multiplyScalar(S*2+50); l.color.set(x[1]); l.intensity=x[2]; });
   if(L.cam){ const a=cam.theta+(L.co==null?0.5:L.co); d.set(Math.sin(a),L.cy||1.15,Math.cos(a)); } else d.fromArray(L.d); d.normalize();
   key.position.copy(d).multiplyScalar(S*2.2+60); key.target.position.set(0,0,0); fill.position.set(-d.x,0.6,-d.z).multiplyScalar(S*2+50); shadowDirty=true; needRender=true; }
 
@@ -2216,11 +2229,11 @@ const _m=new THREE.Matrix4(), _q=new THREE.Quaternion(), _e=new THREE.Euler(), _
 const hash=i=>{ let x=(i+1)*2654435761>>>0; x^=x>>>13; x=Math.imul(x,1274126177)>>>0; x^=x>>>16; return (x>>>0)/4294967296; };
 function chunkOf(i){ const c=i%W, r=(i-c)/W; return Math.floor(r/CH)*1000+Math.floor(c/CH); }
 function makeChunk(k){ const cx=k%1000, cy=Math.floor(k/1000), cap=CH*CH, hi=geoFor(cur.type,shapeOf(cur),true), lo=geoFor(cur.type,shapeOf(cur),false), mat=matFor(cur.type,shapeOf(cur));
-  const A=new THREE.InstancedMesh(hi,mat,cap), B=new THREE.InstancedMesh(lo,mat,cap); B.instanceMatrix=A.instanceMatrix; A.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(cap*3),3); B.instanceColor=A.instanceColor; A.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+  const A=new THREE.InstancedMesh(hi,mat,cap), B=new THREE.InstancedMesh(lo,matForLo(cur.type,shapeOf(cur)),cap), C=new THREE.InstancedMesh(geoMin(cur.type,shapeOf(cur)),matForLo(cur.type,shapeOf(cur)),cap); B.instanceMatrix=A.instanceMatrix; C.instanceMatrix=A.instanceMatrix; A.instanceColor=new THREE.InstancedBufferAttribute(new Float32Array(cap*3),3); B.instanceColor=A.instanceColor; C.instanceColor=A.instanceColor; A.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
   // запасные экземпляры — нулевые: даже если когда-нибудь попадут в отрисовку, их не видно (по умолчанию three ставит их в угол куска)
   A.instanceMatrix.array.fill(0);
-  [A,B].forEach(M=>{ M.position.set(cx*CH-W/2,0,cy*CH-H/2); M.boundingSphere=new THREE.Sphere(new THREE.Vector3(CH/2,0.2,CH/2),CH*0.72); M.castShadow=true; M.receiveShadow=true; M.count=0; scene.add(M); });
-  const o={k,cx,cy,A,B,center:new THREE.Vector3(cx*CH-W/2+CH/2,0,cy*CH-H/2+CH/2)}; chunks.set(k,o); return o; }
+  [A,B,C].forEach(M=>{ M.position.set(cx*CH-W/2,0,cy*CH-H/2); M.boundingSphere=new THREE.Sphere(new THREE.Vector3(CH/2,0.2,CH/2),CH*0.72); M.castShadow=true; M.receiveShadow=true; M.count=0; scene.add(M); });
+  const o={k,cx,cy,A,B,C,center:new THREE.Vector3(cx*CH-W/2+CH/2,0,cy*CH-H/2+CH/2)}; chunks.set(k,o); return o; }
 function rebuildChunk(k){ let o=chunks.get(k); if(!o) o=makeChunk(k); const {cx,cy,A}=o; let n=0; const round=cur.shape==="round", cross=cur.type==="cross", now=performance.now();
   for(let lr=0;lr<CH;lr++){ const r=cy*CH+lr; if(r>=H) break; for(let lc=0;lc<CH;lc++){ const c=cx*CH+lc; if(c>=W) break; const i=r*W+c, p=cur.cells[i]; if(p<0) continue;
       const h1=hash(i), h2=hash(i+7919), h3=hash(i+104729);
@@ -2232,21 +2245,24 @@ function rebuildChunk(k){ let o=chunks.get(k); if(!o) o=makeChunk(k); const {cx,
       const t0=settle.size?settle.get(i):undefined; if(t0!==undefined) settlePose(Math.min(1,(now-t0)/SETTLE_MS),cross);
       _m.compose(_p,_q,_s); A.setMatrixAt(n,_m);
       const base=palLin[p]||_c.set(0xffffff), v=neat?1:0.94+h2*0.1, lift=cross?0.02:0.055; _c.setRGB(lift+base.r*v*(1-lift),lift+base.g*v*(1-lift),lift+base.b*v*(1-lift)); A.setColorAt(n,_c); n++; } }
-  o.A.count=o.B.count=n; A.instanceMatrix.needsUpdate=true; if(A.instanceColor) A.instanceColor.needsUpdate=true; }
+  o.A.count=o.B.count=o.C.count=n; A.instanceMatrix.needsUpdate=true; if(A.instanceColor) A.instanceColor.needsUpdate=true; }
 /* посадка: страза опускается точно в свою клетку и чуть пружинит, крестик «прошивается» из центра */
 const SETTLE_MS=170, settle=new Map(), texHold=new Set(); // цветная основа под деталью проявляется в тот миг, когда деталь касается клетки
 const easeOut=x=>1-Math.pow(1-x,3);
 function settlePose(k,cross){ if(cross){ const e=k<1?1+2.2*Math.pow(k-1,3)+1.2*Math.pow(k-1,2):1; const xz=0.35+0.65*e; _s.x*=xz; _s.z*=xz; _s.y*=0.6+0.4*easeOut(k); return; }
   const c1=1.9, c3=c1+1, e=1+c3*Math.pow(k-1,3)+c1*Math.pow(k-1,2), s=0.62+0.38*e; _s.x*=s; _s.z*=s; _s.y*=0.75+0.25*e; }
-function settleCells(list){ if(reduceMotion||!list.length) return; const now=performance.now(); for(const i of list){ settle.set(i,now); dirtyChunks.add(chunkOf(i)); } needRender=true; }
+// если устройство не успевает рисовать анимацию плавно (огромная почти готовая мозаика), детали ставятся сразу — без подтормаживания
+let liteSettle=false, setFrames=[], lastFrameT=0;
+function settleCells(list){ if(reduceMotion||liteSettle||!list.length) return; const now=performance.now(); for(const i of list){ settle.set(i,now); dirtyChunks.add(chunkOf(i)); } needRender=true; }
 function tickSettle(now){ let fin=false; const land=SETTLE_MS*(cur.type==="cross"?0.3:0.6); settle.forEach((t0,i)=>{ const a=now-t0; if(a>=land&&texHold.delete(i)){ texCell(i); cellTexDirty=true; } if(a>=SETTLE_MS){ settle.delete(i); fin=true; } dirtyChunks.add(chunkOf(i)); }); if(fin) shadowDirty=true; needRender=true; }
-function disposeChunks(){ settle.clear(); texHold.clear(); chunks.forEach(o=>{ [o.A,o.B].forEach(M=>{ scene.remove(M); M.dispose(); }); }); chunks.clear(); dirtyChunks.clear(); }
+function disposeChunks(){ settle.clear(); liteSettle=false; setFrames=[]; texHold.clear(); chunks.forEach(o=>{ [o.A,o.B,o.C].forEach(M=>{ scene.remove(M); M.dispose(); }); }); chunks.clear(); dirtyChunks.clear(); }
 function buildAllChunks(){ disposeChunks(); const has=new Set(); for(let i=0;i<cur.cells.length;i++) if(cur.cells[i]>=0) has.add(chunkOf(i)); has.forEach(k=>rebuildChunk(k)); ghostGeo(); }
-function restyleChunks(){ chunks.forEach(o=>{ o.A.geometry=geoFor(cur.type,shapeOf(cur),true); o.B.geometry=geoFor(cur.type,shapeOf(cur),false); o.A.material=o.B.material=matFor(cur.type,shapeOf(cur)); }); chunks.forEach((o,k)=>rebuildChunk(k)); U.uCross.value=cur.type==="cross"?1:0; ghostGeo(); shadowDirty=true; needRender=true; }
+function restyleChunks(){ chunks.forEach(o=>{ o.A.geometry=geoFor(cur.type,shapeOf(cur),true); o.B.geometry=geoFor(cur.type,shapeOf(cur),false); o.C.geometry=geoMin(cur.type,shapeOf(cur)); o.C.material=matForLo(cur.type,shapeOf(cur)); o.A.material=matFor(cur.type,shapeOf(cur)); o.B.material=matForLo(cur.type,shapeOf(cur)); }); chunks.forEach((o,k)=>rebuildChunk(k)); U.uCross.value=cur.type==="cross"?1:0; ghostGeo(); shadowDirty=true; needRender=true; }
 let lastEditT=0;
 function flushChunks(){ dirtyChunks.forEach(k=>rebuildChunk(k)); dirtyChunks.clear(); shadowDirty=true; lastEditT=performance.now(); }
 const _wp=new THREE.Vector3();
-function updateLOD(){ const th=Math.tan(camera.fov*Math.PI/360); chunks.forEach(o=>{ const d=Math.max(0.5,camera.position.distanceTo(o.center)-CH*0.5); const px=H_px/(2*d*th); const hi=px>=(cur.type==="cross"?18:9); o.A.visible=hi&&o.A.count>0; o.B.visible=!hi&&o.B.count>0; }); }
+function updateLOD(){ const th=Math.tan(camera.fov*Math.PI/360); chunks.forEach(o=>{ const d=Math.max(0.5,camera.position.distanceTo(o.center)-CH*0.5); const px=H_px/(2*d*th); const hi=px>=18, far=px<FAR_PX, mid=!hi&&!far&&(cur.type==="cross"||px>=9); o.A.visible=hi&&o.A.count>0; o.B.visible=mid&&o.B.count>0; o.C.visible=!hi&&!far&&!mid&&o.C.count>0; }); }
+let FAR_PX=4.5;
 
 /* призрак: отпечаток насадки летит за пальцем, прилипает к клеткам и встаёт на место */
 let ghost=null;
@@ -2300,7 +2316,7 @@ function frame(now){ requestAnimationFrame(frame); if((ws.hidden&&!previewOn)||!
   if(canvas.clientWidth&&(Math.abs(canvas.clientWidth-W_px)>1||Math.abs(canvas.clientHeight-H_px)>1)) resize();
   const mv=updateCamera();
   if(mv){ moveT=now; if(dpr>1.3) setLiveDpr(Math.max(1,dpr*0.62)); } else if(dprLive!==dpr&&now-moveT>220) setLiveDpr(dpr); if(dirtyChunks.size){ flushChunks(); needRender=true; } if(cellTexDirty){ cellTex.needsUpdate=true; cellTexDirty=false; needRender=true; }
-  if(hintOn&&sel&&isChart()){ U.uTime.value=now/1000; needRender=true; } if(settle.size) tickSettle(now); if(G.anim){ tickGhost(now); needRender=true; } else if(ghost&&ghost.visible&&!outer&&!(gest&&gest.kind==="stamp"&&ptrs.size>0)&&now-G.t>700){ if(gest&&gest.kind==="stamp") gest=null; hideGhost(); }
+  if(hintOn&&sel&&isChart()){ U.uTime.value=now/1000; needRender=true; } if(settle.size){ if(lastFrameT){ setFrames.push(now-lastFrameT); if(setFrames.length>24) setFrames.shift(); if(setFrames.length>=12){ const a=setFrames.slice().sort((x,y)=>x-y)[setFrames.length>>1]; if(a>40){ liteSettle=true; settle.forEach((t,i)=>dirtyChunks.add(chunkOf(i))); settle.clear(); } } } tickSettle(now); } lastFrameT=now; if(G.anim){ tickGhost(now); needRender=true; } else if(ghost&&ghost.visible&&!outer&&!(gest&&gest.kind==="stamp"&&ptrs.size>0)&&now-G.t>700){ if(gest&&gest.kind==="stamp") gest=null; hideGhost(); }
   if(mv||needRender){ const th=Math.tan(camera.fov*Math.PI/360); U.uPx.value=H_px/(2*camera.position.distanceTo(cam.t)*th); updateLOD();
     if(selCell>=0){ const c=selCell%W, r=(selCell-c)/W; selRing.position.set(c-W/2+0.5,0.03,r-H/2+0.5); selRing.visible=true; } else selRing.visible=false;
     if(shadowDirty&&!settle.size&&!stroke&&now-lastEditT>280&&now-lastShadow>110){ renderer.shadowMap.needsUpdate=true; shadowDirty=false; lastShadow=now; }
@@ -2898,7 +2914,7 @@ window.addEventListener("unhandledrejection",e=>{ if(!bootDone) bootFail(e.reaso
 async function boot(){ try{ await IDB.open(); }catch(_){} await Store.load(); route(); bootDone=true; loaderHide(); requestAnimationFrame(frame);
   try{ if(navigator.storage&&navigator.storage.persisted&&!(await navigator.storage.persisted())) navigator.storage.persist().catch(()=>{}); }catch(_){} }
 window.__dbg=()=>({cam:{t:cam.t.toArray(),r:cam.r,phi:cam.phi,theta:cam.theta},g:{t:cam.g.t.toArray(),r:cam.g.r},W,H,Wp:W_px,Hp:H_px});
-window.__ms={state:()=>cur&&{w:W,h:H,pal:cur.pal.length,placed:counts.placedAll,ok:counts.okAll,total:counts.total,sel,step:cur.step,blocks:blocks.length,tool:tool.id},cellXY:i=>{ const r=canvas.getBoundingClientRect(), p=cellScreen(i); return [r.left+p[0],r.top+p[1]]; },firstOf:code=>{ const si=cur.pal.indexOf(code); return cur.grid.findIndex((t,i)=>t===si&&cur.cells[i]<0); },fillAll:()=>{ beginStroke(); for(let i=0;i<cur.grid.length;i++) if(cur.grid[i]>=0) setCell(i,cur.grid[i]); endStroke(); },fillBlock:()=>{ const b=curBlock(); beginStroke(); for(let r=b.y0;r<b.y1;r++) for(let c=b.x0;c<b.x1;c++){ const i=r*W+c; if(cur.grid[i]>=0) setCell(i,cur.grid[i]); } endStroke(); },cam:(th,ph,r,x,z)=>{ camGo(new THREE.Vector3(x||0,0,z||0),r,ph,th,true); },tool:id=>setTool(TOOLS.find(t=>t.id===id)),mode:m=>{ dragMode=m; handSync(); },vis:()=>visList&&visList.map(v=>v.code),ghost:()=>!!(ghost&&ghost.visible),fillCode:code=>{ const si=cur.pal.indexOf(code); beginStroke(); for(let i=0;i<cur.grid.length;i++) if(cur.grid[i]===si) setCell(i,si); endStroke(); updateCountsUI(); },sndTest:()=>{ try{ const a=sndCtx(); const t=a.currentTime; Object.keys(SND).filter(k=>k!=="own").forEach(k=>{ SND[k](t,true); SND[k](t,false); }); return "ok "+a.state; }catch(e){ return "err "+e.message; } },okCell:i=>cur.cells[i]<0&&cur.grid[i]===cur.pal.indexOf(sel),info:()=>({calls:renderer.info.render.calls,tris:renderer.info.render.triangles})};
+window.__ms={state:()=>cur&&{w:W,h:H,pal:cur.pal.length,placed:counts.placedAll,ok:counts.okAll,total:counts.total,sel,step:cur.step,blocks:blocks.length,tool:tool.id},cellXY:i=>{ const r=canvas.getBoundingClientRect(), p=cellScreen(i); return [r.left+p[0],r.top+p[1]]; },firstOf:code=>{ const si=cur.pal.indexOf(code); return cur.grid.findIndex((t,i)=>t===si&&cur.cells[i]<0); },fillAll:()=>{ beginStroke(); for(let i=0;i<cur.grid.length;i++) if(cur.grid[i]>=0) setCell(i,cur.grid[i]); endStroke(); },fillBlock:()=>{ const b=curBlock(); beginStroke(); for(let r=b.y0;r<b.y1;r++) for(let c=b.x0;c<b.x1;c++){ const i=r*W+c; if(cur.grid[i]>=0) setCell(i,cur.grid[i]); } endStroke(); },cam:(th,ph,r,x,z)=>{ camGo(new THREE.Vector3(x||0,0,z||0),r,ph,th,true); },tool:id=>setTool(TOOLS.find(t=>t.id===id)),mode:m=>{ dragMode=m; handSync(); },vis:()=>visList&&visList.map(v=>v.code),ghost:()=>!!(ghost&&ghost.visible),fillCode:code=>{ const si=cur.pal.indexOf(code); beginStroke(); for(let i=0;i<cur.grid.length;i++) if(cur.grid[i]===si) setCell(i,si); endStroke(); updateCountsUI(); },sndTest:()=>{ try{ const a=sndCtx(); const t=a.currentTime; Object.keys(SND).filter(k=>k!=="own").forEach(k=>{ SND[k](t,true); SND[k](t,false); }); return "ok "+a.state; }catch(e){ return "err "+e.message; } },fillAllBut:code=>{ const si=cur.pal.indexOf(code); beginStroke(); for(let i=0;i<cur.grid.length;i++) if(cur.grid[i]!==si) setCell(i,cur.grid[i]); stroke=null; changed(); },perf:(o)=>{ o=o||{}; const bak={tr:gemMat.transmission,ir:gemMat.iridescence,cc:gemMat.clearcoat}; if(o.tr!=null) gemMat.transmission=o.tr; if(o.ir!=null) gemMat.iridescence=o.ir; if(o.cc!=null) gemMat.clearcoat=o.cc; gemMat.needsUpdate=true; updateLOD(); if(o.lo) chunks.forEach(c=>{ if(c.A.visible){ c.A.visible=false; c.B.visible=c.B.count>0; } }); if(o.hi) chunks.forEach(c=>{ if(c.B.visible){ c.B.visible=false; c.A.visible=c.A.count>0; } }); const g=renderer.getContext(), px=new Uint8Array(4); renderer.render(scene,camera); g.readPixels(0,0,1,1,g.RGBA,g.UNSIGNED_BYTE,px); const t0=performance.now(); for(let k=0;k<3;k++){ renderer.render(scene,camera); g.readPixels(0,0,1,1,g.RGBA,g.UNSIGNED_BYTE,px); } const ms=(performance.now()-t0)/3; let hiN=0,loN=0,minN=0; chunks.forEach(c=>{ if(c.A.visible) hiN+=c.A.count; if(c.B.visible) loN+=c.B.count; if(c.C.visible) minN+=c.C.count; }); gemMat.transmission=bak.tr; gemMat.iridescence=bak.ir; gemMat.clearcoat=bak.cc; gemMat.needsUpdate=true; updateLOD(); return {ms:Math.round(ms),hiN,loN,minN,calls:renderer.info.render.calls,tris:renderer.info.render.triangles}; },tierDbg:(o)=>{ if(o.far!=null) FAR_PX=o.far;  if(o.hiPx!=null) window.__hiPx=o.hiPx; updateLOD(); needRender=true; return FAR_PX; },okCell:i=>cur.cells[i]<0&&cur.grid[i]===cur.pal.indexOf(sel),info:()=>({calls:renderer.info.render.calls,tris:renderer.info.render.triangles})};
 boot();
 })();
 </script>
